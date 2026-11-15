@@ -11,7 +11,8 @@ fi
 # Méthode de saisie (pinyin) pour les applis GTK/Qt/X11
 export GTK_IM_MODULE=ibus QT_IM_MODULE=ibus XMODIFIERS=@im=ibus
 
-# Démarre sway automatiquement en se connectant sur tty1
-if [ "$(tty)" = /dev/tty1 ] && command -v sway >/dev/null; then
+# Démarre sway en se connectant sur tty1 (connexion texte de secours).
+# Avec l'écran de connexion greetd, c'est lui qui lance sway (PLUME_SESSION=1).
+if [ -z "${PLUME_SESSION:-}" ] && [ "$(tty)" = /dev/tty1 ] && command -v sway >/dev/null; then
 	exec dbus-run-session sway
 fi

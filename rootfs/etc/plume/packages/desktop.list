@@ -1,5 +1,6 @@
 # Bureau Wayland minimal (sway ~ quelques Mo, ~100 Mo de RAM au repos)
-sway swaybg swayidle swaylock
+sway swaybg swayidle swaylock   # swaylock = secours si plume-hud manque
+greetd greetd-openrc cage       # écran de connexion : greetd lance plume-hud dans cage (~4 Mo)
 foot            # terminal
 fuzzel          # lanceur d'applications
 mako libnotify  # notifications

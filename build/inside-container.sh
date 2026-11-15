@@ -31,6 +31,10 @@ git -C "$BUILD_HOME/aports" sparse-checkout set scripts
 cp /work/build/mkimg.plume.sh /work/build/genapkovl-plume.sh "$BUILD_HOME/aports/scripts/"
 chmod +x "$BUILD_HOME/aports/scripts/genapkovl-plume.sh"
 cp -a /work/rootfs "$BUILD_HOME/rootfs"
+# sources de plume-hud (compilées sur la machine par desktop.sh)
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/hud"
+cp /work/hud/*.c /work/hud/*.h /work/hud/Makefile "$BUILD_HOME/rootfs/etc/plume/hud/"
+cp -r /work/hud/pam.d "$BUILD_HOME/rootfs/etc/plume/hud/"
 mkdir -p "$BUILD_HOME/out"
 chown -R "$BUILD_USER:abuild" "$BUILD_HOME"
 

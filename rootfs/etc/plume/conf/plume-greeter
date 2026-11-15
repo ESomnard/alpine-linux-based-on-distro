@@ -1,0 +1,9 @@
+#!/bin/sh
+# Lancé par greetd (utilisateur « greetd ») : affiche l'écran de connexion HUD.
+# cage = compositeur « kiosque » : une seule application plein écran, impossible d'en sortir.
+export XDG_RUNTIME_DIR="${HOME:-/var/lib/greetd}/runtime"
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 0700 "$XDG_RUNTIME_DIR"
+# mêmes claviers que le bureau : AZERTY + QWERTY (Alt+Maj)
+export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-fr,us}"
+export XKB_DEFAULT_OPTIONS="${XKB_DEFAULT_OPTIONS:-grp:alt_shift_toggle}"
+exec cage -s -- plume-hud --greeter

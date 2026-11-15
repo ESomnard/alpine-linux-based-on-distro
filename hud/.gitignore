@@ -1,0 +1,4 @@
+/plume-hud
+*.o
+*-protocol.c
+*-client-protocol.h

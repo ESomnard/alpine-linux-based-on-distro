@@ -20,8 +20,10 @@ docker run --rm --platform linux/amd64 \
 		python3 -u -I /tests/vm-test.py /o/$(basename "$ISO")
 	"
 
-# Récupère la capture d'écran transmise en base64 par la console série
-tr -d '\r' < out/test/vm.log | sed -n '/^===B64START===$/,/^===B64END===$/p' \
-	| sed '1d;$d' | base64 -d > out/test/screenshot.png 2>/dev/null || true
-[ -s out/test/screenshot.png ] && echo "Capture : out/test/screenshot.png"
+# Récupère les captures d'écran transmises en base64 par la console série
+for name in greeter bureau verrou; do
+	tr -d '\r' < out/test/vm.log | sed -n "/^===B64START $name===\$/,/^===B64END===\$/p" \
+		| sed '1d;$d' | base64 -d > "out/test/$name.png" 2>/dev/null || true
+	[ -s "out/test/$name.png" ] && echo "Capture : out/test/$name.png" || rm -f "out/test/$name.png"
+done
 grep -a '^### ' out/test/vm.log | tr -d '\r' || true

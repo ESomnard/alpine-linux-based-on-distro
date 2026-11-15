@@ -29,7 +29,7 @@ IFACES
 cp -a "$PLUME_ROOTFS/." "$tmp/"
 chmod 0755 "$tmp"/etc/plume/*.sh
 chmod 0600 "$tmp"/etc/doas.d/*.conf
-chmod 0755 "$tmp"/etc/skel/.config/sway/*.sh
+chmod 0755 "$tmp"/etc/skel/.config/sway/*.sh "$tmp"/etc/plume/conf/plume-greeter
 chown -R 0:0 "$tmp"
 
 # Services minimum du live

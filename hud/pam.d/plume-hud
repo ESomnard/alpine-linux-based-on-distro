@@ -1,0 +1,2 @@
+# PAM de l'écran de verrouillage plume-hud (comme swaylock)
+auth include base-auth

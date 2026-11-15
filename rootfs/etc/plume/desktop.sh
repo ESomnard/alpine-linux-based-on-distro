@@ -67,6 +67,32 @@ awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: rea
 	echo "  - $u"
 done
 
+log "Compilation de plume-hud (écran de connexion + verrouillage HUD)"
+# outils de compilation installés temporairement, puis supprimés juste après
+BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev"
+HUD_OK=0
+# shellcheck disable=SC2086
+if apk add --virtual .plume-build $BUILD_DEPS; then
+	rm -rf /tmp/plume-hud && cp -r "$PLUME/hud" /tmp/plume-hud
+	if make -C /tmp/plume-hud && make -C /tmp/plume-hud install PREFIX=/usr/local; then
+		HUD_OK=1
+	fi
+	rm -rf /tmp/plume-hud
+	log "Suppression des outils de compilation"
+	apk del .plume-build
+fi
+
+if [ "$HUD_OK" = 1 ]; then
+	log "Écran de connexion : greetd + plume-hud"
+	install -Dm755 "$PLUME/conf/plume-greeter" /usr/local/bin/plume-greeter
+	install -Dm644 "$PLUME/conf/greetd.toml" /etc/greetd/config.toml
+	for g in seat video input; do addgroup greetd "$g" 2>/dev/null || true; done
+	grep -q '^rc_need=' /etc/conf.d/greetd 2>/dev/null || echo 'rc_need="seatd"' >> /etc/conf.d/greetd
+	rc-update add greetd default
+else
+	log "ATTENTION : plume-hud n'a pas pu être compilé — connexion texte + swaylock conservés"
+fi
+
 log "Nettoyage"
 rm -rf /var/cache/apk/*
 
@@ -90,7 +116,8 @@ cat <<'END'
 
 Terminé ! Redémarre avec : doas reboot
 
-Après le redémarrage, connecte-toi sur tty1 : sway démarre tout seul.
+Après le redémarrage, l'écran de connexion HUD s'affiche : ton mot de passe → sway.
+(Connexion texte de secours : Ctrl+Alt+F1.)  Verrouiller : Super+Échap.
 Wifi (une seule fois) :  iwctl station wlan0 connect "NomDuReseau"
 
 Pour alléger encore : doas sh /etc/plume/slim-firmware.sh

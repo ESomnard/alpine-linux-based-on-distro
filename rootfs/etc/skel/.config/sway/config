@@ -2,7 +2,8 @@
 set $mod Mod4
 set $term foot
 set $menu fuzzel
-set $lock swaylock -f -c 1e1e2e
+# Écran de verrouillage HUD (plume-hud) ; swaylock en secours
+set $lock plume-hud -f || swaylock -f -c 1e1e2e
 
 # --- Entrées ---
 # AZERTY (fr) + QWERTY (us) : Alt+Maj pour basculer

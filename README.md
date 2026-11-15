@@ -13,6 +13,7 @@ Ce projet a été **conçu et dirigé par ESomnard** et
 | ESomnard | Claude |
 |---|---|
 | Idée et objectif du projet | Écriture du code (scripts, configs, build, tests) |
+| Design et fonctionnalités de l'écran HUD (projet d'origine *HUD Lockscreen*) | Réécriture native du HUD en C (`plume-hud`) |
 | Exigences : légèreté, usage quotidien, claviers QWERTY / AZERTY / pinyin, écran de verrouillage, test en VM | Choix techniques (sway, iwd, IBus, zram…) et mesures de poids |
 | Pilotage, priorités, relecture et validation | Construction de l'ISO, tests en VM, recherche et correction des bugs |
 | Tests manuels | Rédaction de la documentation |
@@ -62,6 +63,7 @@ Mesuré dans le test automatique, une fois tout installé : **1,1 Go sur le disq
 | Swap | **zram** (compressé en RAM) | partition swap | Aucun espace disque perdu |
 | Heure | **ntpd de BusyBox** | chrony | Déjà présent, 0 octet de plus |
 | Firmwares | **seulement ceux de ton matériel** | tous (~770 Mo) | Détectés à l'installation + `slim-firmware.sh` |
+| Connexion et verrouillage | GDM / SDDM (100+ Mo), Electron (~250 Mo) | **plume-hud** (~95 Ko) | Écrit en C, outils de compilation supprimés après |
 
 ### Bureau (Wayland)
 
@@ -72,7 +74,8 @@ Mesuré dans le test automatique, une fois tout installé : **1,1 Go sur le disq
 | Terminal | **foot** |
 | Lanceur d'applications | **fuzzel** |
 | Notifications | **mako** |
-| Écran de verrouillage | **swaylock** + **swayidle** (verrouillage auto à 5 min, avant la veille, en fermant le capot) |
+| Écran de connexion | **plume-hud** (HUD maison) lancé par **greetd** dans **cage** |
+| Écran de verrouillage | **plume-hud** (même HUD, protocole sécurisé) + **swayidle** : verrouillage auto à 5 min, avant la veille, en fermant le capot |
 | Captures d'écran | **grim** + **slurp** |
 | Presse-papiers | **wl-clipboard** |
 | Son | **PipeWire** + WirePlumber (compatible PulseAudio et ALSA) |
@@ -109,7 +112,9 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Bureau (`desktop.sh`) : paquets, services, groupes, zram | ✅ Testé en VM |
 | sway + terminal + son (PipeWire) + pinyin (IBus) au démarrage du bureau | ✅ Testé en VM |
 | Allègement des firmwares (`slim-firmware.sh`) | ✅ Testé en VM (rien à supprimer : l'installateur ne met déjà que les firmwares nécessaires) |
-| Capture d'écran dans le test automatique | 🟡 Corrigée, à revalider |
+| Captures d'écran dans le test automatique (connexion, bureau, verrouillage) | ✅ Testé en VM |
+| `plume-hud` : verrou, greeter, mauvais / bon mot de passe | ✅ Testé dans un sway virtuel (`tests/hud-preview.sh`) |
+| `plume-hud` intégré : compilé puis outils supprimés, greetd au démarrage, verrouillage depuis sway | ✅ Testé en VM |
 | Wifi, veille, luminosité, touches multimédia | ⚪ Codé, à tester sur un vrai PC |
 | Démarrage UEFI | ⚪ À tester |
 | Chiffrement du disque | ⚪ À faire |
@@ -159,10 +164,15 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   ├── mkimg.plume.sh            # PROFIL de l'ISO (base, noyau, paquets embarqués)
 │   ├── genapkovl-plume.sh        # overlay : fichiers Plume injectés dans le système
 │   └── run-qemu.sh               # VM locale si QEMU est installé sur la machine
+├── hud/                          # plume-hud : écran de connexion + verrouillage HUD (C)
+│   ├── main.c draw.c sys.c auth.c hud.h Makefile
+│   └── README.md                 # détails du HUD
 ├── tests/
 │   ├── vm-test.sh                # test automatique complet (QEMU dans Docker)
 │   ├── vm-test.py                # pilote la VM par la console série (pexpect)
-│   └── vm-gui.sh                 # VM graphique accessible en VNC
+│   ├── vm-gui.sh                 # VM graphique accessible en VNC
+│   ├── hud-preview.sh            # teste plume-hud dans un sway virtuel (captures)
+│   └── fake-greetd.py            # faux greetd pour tester l'écran de connexion
 └── rootfs/                       # fichiers copiés tels quels dans le système
     └── etc/
         ├── motd                  # message d'accueil
@@ -267,7 +277,7 @@ open vnc://localhost:5901       # macOS (ou Finder > Aller > Se connecter au ser
 ```
 
 - Mot de passe VNC : **`plume`**
-- Après `make test` : utilisateur **`test`**, mot de passe **`plume-test-123`**
+- Après `make test` : l'**écran de connexion HUD** s'affiche ; utilisateur **`test`**, mot de passe **`plume-test-123`**
 - La VM démarre sur une **copie** du disque (`out/vm/plume.qcow2`). Pour repartir de zéro : `rm out/vm/plume.qcow2`.
 - Arrêt : `Ctrl + C` dans le terminal, ou `Super + Maj + e` → Éteindre.
 
@@ -330,9 +340,12 @@ Le script :
 4. active les services `dbus`, `seatd`, `zram-init` et `iwd` ;
 5. règle le swap **zram** à la moitié de la RAM ;
 6. ajoute ton utilisateur aux groupes nécessaires (`seat`, `video`, `audio`, `input`…) et copie la config par défaut sans écraser l'existant ;
-7. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
+7. **compile `plume-hud`**, l'écran de connexion et de verrouillage HUD, puis **supprime les outils de compilation** ;
+8. active **greetd**, qui affiche le HUD de connexion au démarrage ;
+9. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
 
-Ensuite, connecte-toi sur le premier terminal (tty1) : **sway démarre automatiquement**.
+Au redémarrage, **l'écran de connexion HUD** s'affiche : tape ton mot de passe, sway démarre.
+Connexion texte de secours : `Ctrl + Alt + F1`.
 
 Si tu étais en wifi, reconnecte-toi une fois avec iwd, il s'en souviendra :
 ```sh
@@ -413,6 +426,17 @@ La touche `Super` est la touche Windows (⌘ sur Mac).
 
 Fermer le capot = mise en veille. L'écran se verrouille après 5 min et s'éteint après 10.
 
+### Écran de connexion et de verrouillage (plume-hud)
+
+Le même HUD sert au démarrage (connexion) et au verrouillage :
+
+- **5 panneaux** : opérateur et système (CPU, RAM, uptime), horloge et mot de passe, énergie et réseau, calendrier, journal ;
+- **mot de passe du compte** ; après **5 erreurs**, blocage de **30 s** ;
+- **sécurisé** : même si le programme plante, la session reste verrouillée ;
+- `Tab` passe de l'utilisateur au mot de passe (connexion), `Ctrl + U` efface le champ.
+
+Voir `hud/README.md` pour les détails.
+
 ### Écrire en chinois (pinyin)
 
 1. `Super + Espace` : la barre affiche `拼音`.
@@ -477,6 +501,8 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 | Écran noir en VM | `WLR_RENDERER=pixman sway` |
 | Clavier ou souris inactifs sous sway | `doas setup-devd udev`, puis redémarre |
 | Pas de son | `ps \| grep pipewire` ; vérifie `echo $XDG_RUNTIME_DIR` et le groupe `audio` |
+| Écran de connexion noir ou absent | `Ctrl + Alt + F1` pour la connexion texte, puis `doas rc-service greetd restart` ; journal : `doas cat /var/log/messages \| grep -i greet` |
+| Le verrouillage ne s'affiche pas | `plume-hud --dev` pour tester ; à défaut, sway utilise swaylock automatiquement |
 | Le pinyin ne s'active pas | `ps \| grep ibus-daemon` ; relance avec `ibus-daemon -drx` |
 | Wifi absent | `doas rc-service iwd restart`, puis `iwctl` ; si la carte n'apparaît pas : `doas apk add linux-firmware` |
 | Plus de wifi après `slim-firmware.sh` | Branche un câble, `doas apk add linux-firmware`, redémarre, relance le script avec le wifi **actif** |

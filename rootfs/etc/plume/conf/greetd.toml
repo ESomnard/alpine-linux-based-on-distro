@@ -1,0 +1,7 @@
+# Écran de connexion Plume : greetd lance le HUD (plume-hud) dans cage.
+[terminal]
+vt = 7
+
+[default_session]
+command = "/usr/local/bin/plume-greeter"
+user = "greetd"

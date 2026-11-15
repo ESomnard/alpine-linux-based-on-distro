@@ -163,6 +163,15 @@ vm.run('for p in sway foot fuzzel swaylock firefox mpv imv zathura pcmanfm micro
        'command -v $p >/dev/null && echo "OK  $p" || echo "MANQUE $p"; done; '
        'ls /usr/share/ibus/component/; ls /usr/share/fonts')
 
+step("Écran de connexion (greetd + plume-hud)")
+vm.run('command -v plume-hud && ls -l /usr/local/bin/plume-hud; '
+       'for p in gcc make wayland-dev; do apk info -e $p >/dev/null && echo "RESTE $p" || echo "SUPPRIME $p"; done; '
+       'rc-status default | grep greetd; sleep 20; ps -o user,args | grep -E "[c]age|[p]lume-hud"')
+vm.run("doas -u greetd sh -c 'export XDG_RUNTIME_DIR=/var/lib/greetd/runtime; "
+       "export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR | grep wayland- | grep -v lock | head -1); "
+       "grim /tmp/greeter.png' && ls -l /tmp/greeter.png", 180)
+vm.run("echo ===B64START greeter===; base64 /tmp/greeter.png; echo ===B64END===", 900)
+
 step("Test de sway (sortie virtuelle, rendu logiciel)")
 vm.run("export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1")
 vm.run("(dbus-run-session sway > /tmp/sway.log 2>&1 &) ; sleep 40", 180)
@@ -175,7 +184,11 @@ vm.run('echo "fenetres foot: $(swaymsg -t get_tree | grep -c \'"app_id": "foot"\
        'echo "processus pipewire: $(ps | grep -c \'[p]ipewire\')"; '
        'echo "ibus-daemon: $(ps | grep -c \'[i]bus-daemon\')"; free -m | sed -n 2p')
 vm.run("grim /tmp/shot.png && ls -l /tmp/shot.png || tail -30 /tmp/sway.log", 180)
-vm.run("echo ===B64START===; base64 /tmp/shot.png; echo ===B64END===", 900)
+vm.run("echo ===B64START bureau===; base64 /tmp/shot.png; echo ===B64END===", 900)
+
+step("Écran de verrouillage (plume-hud --lock)")
+vm.run("(plume-hud --lock > /tmp/lock.log 2>&1 &) ; sleep 15; grim /tmp/lock.png && ls -l /tmp/lock.png; cat /tmp/lock.log", 180)
+vm.run("echo ===B64START verrou===; base64 /tmp/lock.png; echo ===B64END===", 900)
 
 step("slim-firmware.sh")
 vm.run_interactive("doas sh /etc/plume/slim-firmware.sh", [
