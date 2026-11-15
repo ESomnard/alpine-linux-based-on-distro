@@ -1,0 +1,7 @@
+# Applications du quotidien. Retire ce dont tu n'as pas besoin.
+firefox                     # navigateur (le plus gros paquet, mais indispensable)
+mpv                         # vidéo / musique
+imv                         # images
+zathura zathura-pdf-mupdf   # PDF
+pcmanfm                     # gestionnaire de fichiers (GTK, déjà tiré par firefox)
+micro                       # éditeur de texte simple dans le terminal

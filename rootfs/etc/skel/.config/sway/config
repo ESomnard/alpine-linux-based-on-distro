@@ -1,0 +1,123 @@
+# Plume — configuration sway minimale. Doc : man 5 sway
+set $mod Mod4
+set $term foot
+set $menu fuzzel
+set $lock swaylock -f -c 1e1e2e
+
+# --- Entrées ---
+# AZERTY (fr) + QWERTY (us) : Alt+Maj pour basculer
+input type:keyboard {
+    xkb_layout fr,us
+    xkb_options grp:alt_shift_toggle
+}
+input type:touchpad {
+    tap enabled
+    natural_scroll enabled
+    dwt enabled
+}
+
+# --- Apparence ---
+output * bg #1e1e2e solid_color
+font pango:DejaVu Sans 10
+default_border pixel 2
+client.focused #b4befe #b4befe #1e1e2e #b4befe
+
+# --- Démarrage ---
+exec /usr/libexec/pipewire-launcher
+exec mako
+exec ibus-daemon -drx
+exec swayidle -w \
+    timeout 300 '$lock' \
+    timeout 600 'swaymsg "output * power off"' resume 'swaymsg "output * power on"' \
+    before-sleep '$lock'
+
+# --- Raccourcis de base ---
+bindsym $mod+Return exec $term
+bindsym $mod+d exec $menu
+bindsym $mod+b exec firefox
+bindsym $mod+e exec pcmanfm
+bindsym $mod+Shift+q kill
+bindsym $mod+Shift+c reload
+bindsym $mod+Escape exec $lock
+bindsym $mod+Shift+e exec swaynag -t warning -m 'Que faire ?' \
+    -B 'Éteindre' 'doas /sbin/poweroff' \
+    -B 'Redémarrer' 'doas /sbin/reboot' \
+    -B 'Veille' 'doas /usr/sbin/zzz' \
+    -B 'Déconnexion' 'swaymsg exit'
+
+# Fermer l'écran du portable = veille
+bindswitch --reload --locked lid:on exec doas /usr/sbin/zzz
+
+# --- Fenêtres ---
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
+bindsym $mod+Shift+Left move left
+bindsym $mod+Shift+Down move down
+bindsym $mod+Shift+Up move up
+bindsym $mod+Shift+Right move right
+bindsym $mod+f fullscreen
+bindsym $mod+Shift+space floating toggle
+# Super+Espace : saisie chinoise pinyin (activée / désactivée)
+bindsym $mod+space exec ~/.config/sway/pinyin-toggle.sh
+bindsym $mod+h splith
+bindsym $mod+v splitv
+bindsym $mod+w layout tabbed
+bindsym $mod+t layout toggle split
+floating_modifier $mod normal
+
+mode "resize" {
+    bindsym Left resize shrink width 20px
+    bindsym Right resize grow width 20px
+    bindsym Up resize shrink height 20px
+    bindsym Down resize grow height 20px
+    bindsym Escape mode "default"
+    bindsym Return mode "default"
+}
+bindsym $mod+r mode "resize"
+
+# --- Bureaux 1..10 (bindcode = marche en AZERTY comme en QWERTY) ---
+bindcode $mod+10 workspace number 1
+bindcode $mod+11 workspace number 2
+bindcode $mod+12 workspace number 3
+bindcode $mod+13 workspace number 4
+bindcode $mod+14 workspace number 5
+bindcode $mod+15 workspace number 6
+bindcode $mod+16 workspace number 7
+bindcode $mod+17 workspace number 8
+bindcode $mod+18 workspace number 9
+bindcode $mod+19 workspace number 10
+bindcode $mod+Shift+10 move container to workspace number 1
+bindcode $mod+Shift+11 move container to workspace number 2
+bindcode $mod+Shift+12 move container to workspace number 3
+bindcode $mod+Shift+13 move container to workspace number 4
+bindcode $mod+Shift+14 move container to workspace number 5
+bindcode $mod+Shift+15 move container to workspace number 6
+bindcode $mod+Shift+16 move container to workspace number 7
+bindcode $mod+Shift+17 move container to workspace number 8
+bindcode $mod+Shift+18 move container to workspace number 9
+bindcode $mod+Shift+19 move container to workspace number 10
+
+# --- Touches multimédia ---
+bindsym XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+bindsym XF86MonBrightnessUp exec brightnessctl set 5%+
+bindsym XF86MonBrightnessDown exec brightnessctl set 5%-
+bindsym Print exec grim -g "$(slurp)" - | wl-copy
+bindsym Shift+Print exec grim ~/capture-$(date +%Y%m%d-%H%M%S).png
+
+# --- Barre ---
+bar {
+    position top
+    status_command ~/.config/sway/status.sh
+    colors {
+        background #1e1e2e
+        statusline #cdd6f4
+        focused_workspace #b4befe #b4befe #1e1e2e
+    }
+}
+
+include /etc/sway/config.d/*

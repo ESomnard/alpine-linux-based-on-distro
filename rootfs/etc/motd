@@ -1,0 +1,7 @@
+
+  Bienvenue sur Plume Linux (basée sur Alpine)
+
+  Installation sur disque :      sh /etc/plume/install.sh
+  Puis, après redémarrage :      doas sh /etc/plume/desktop.sh
+  Alléger les firmwares :        doas sh /etc/plume/slim-firmware.sh
+
