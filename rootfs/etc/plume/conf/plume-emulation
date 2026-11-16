@@ -1,0 +1,57 @@
+#!/bin/sh
+# Plume — pack émulation : le meilleur émulateur pour chaque console connue.
+#   sudo plume-emulation           paquets Alpine (~1 Go, Qt compris)
+#   sudo plume-emulation --tout    + Flathub pour PS2, PS3, Wii U, 3DS, Xbox, Dreamcast… (plusieurs Go)
+#   plume-emulation --liste        affiche ce qui serait installé
+# Les jeux (ROM, BIOS) ne sont pas fournis : utilise uniquement tes propres copies.
+set -eu
+ALPINE="retroarch libretro-nestopia libretro-mgba libretro-beetle-psx libretro-mupen64plus
+dolphin-emu ppsspp melonds mgba-qt"
+FLATHUB="net.pcsx2.PCSX2 net.rpcs3.RPCS3 info.cemu.Cemu org.azahar_emu.Azahar app.xemu.xemu
+org.flycast.Flycast ca.mesen.Mesen com.github.Rosalie241.RMG"
+
+liste() {
+	cat <<'L'
+Console                         Émulateur            Source
+NES / Famicom                   RetroArch (Nestopia) Alpine
+Game Boy / Color / Advance      mGBA                 Alpine
+Nintendo DS                     melonDS              Alpine
+PlayStation 1                   RetroArch (Beetle)   Alpine
+Nintendo 64                     RetroArch (Mupen64)  Alpine
+GameCube / Wii                  Dolphin              Alpine
+PSP                             PPSSPP               Alpine
+--- avec --tout (Flathub) ---
+Super Nintendo                  Mesen                Flathub
+Nintendo 64 (interface dédiée)  Rosalie's Mupen GUI  Flathub
+PlayStation 2                   PCSX2                Flathub
+PlayStation 3                   RPCS3                Flathub
+Wii U                           Cemu                 Flathub
+Nintendo 3DS                    Azahar               Flathub
+Xbox                            xemu                 Flathub
+Dreamcast                       Flycast              Flathub
+L
+}
+
+case "${1:-}" in
+--liste) liste; exit 0 ;;
+--tout|"") ;;
+*) echo "Usage : sudo plume-emulation [--tout] | plume-emulation --liste" >&2; exit 2 ;;
+esac
+if [ "$(id -u)" -ne 0 ]; then
+	exec sudo "$0" "$@"
+fi
+liste
+echo; echo "==> Émulateurs Alpine"
+# shellcheck disable=SC2086
+apk add $ALPINE
+# manettes : accès aux périphériques de jeu pour l'utilisateur (groupe input)
+U=${SUDO_USER:-}
+[ -n "$U" ] && addgroup "$U" input 2>/dev/null || true
+if [ "${1:-}" = --tout ]; then
+	echo; echo "==> Émulateurs Flathub (pour $U, sans droits administrateur)"
+	apk add flatpak
+	[ -n "$U" ] || { echo "Lance avec sudo depuis ton compte pour installer les applis Flathub." >&2; exit 1; }
+	su "$U" -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+		flatpak install --user -y --noninteractive flathub $(echo $FLATHUB)"
+fi
+echo; echo "Terminé. Les émulateurs sont dans la grille des applications (Super + a)."

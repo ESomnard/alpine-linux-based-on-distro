@@ -1,5 +1,6 @@
 /* plume-term — mode HUD : panneaux SYSTÈME, RÉSEAU, FICHIERS, CLAVIER autour du terminal. */
 #include "term.h"
+#include "theme.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -17,8 +18,6 @@ struct hud H;
 static bool static_dirty; /* couche fixe à refaire (disposition du clavier changée) */
 
 #define C_BG      0x02060b
-#define C_LINE    0x4fb8e0
-#define C_LINEDIM 0x1d5a78
 #define C_TEXT    0xcdeefc
 #define C_MUTED   0x5f8ea5
 #define C_OK      0x4fe0a4
@@ -26,7 +25,6 @@ static bool static_dirty; /* couche fixe à refaire (disposition du clavier chan
 #define C_WARN    0xe6c86e
 #define C_PURP    0xb48cff
 #define C_BRIGHT  0xe9f9ff
-#define C_CORNER  0x9fe4ff
 #define FONT      "JetBrains Mono, DejaVu Sans Mono, WenQuanYi Zen Hei"
 
 static const char *JOURS[] = { "DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI" };
@@ -131,8 +129,8 @@ static double title(cairo_t *cr, double x, double y, double w, double vh, const 
 	double lx = x + tw + 0.6 * px, lx2 = x + w - (rw ? rw + 0.6 * px : 0);
 	if (lx2 > lx) {
 		cairo_pattern_t *g = cairo_pattern_create_linear(lx, 0, lx2, 0);
-		cairo_pattern_add_color_stop_rgba(g, 0, 0x1d / 255.0, 0x5a / 255.0, 0x78 / 255.0, 1);
-		cairo_pattern_add_color_stop_rgba(g, 1, 0x1d / 255.0, 0x5a / 255.0, 0x78 / 255.0, right ? 0.6 : 0);
+		cairo_pattern_add_color_stop_rgba(g, 0, DIM_RGB, 1);
+		cairo_pattern_add_color_stop_rgba(g, 1, DIM_RGB, right ? 0.6 : 0);
 		cairo_set_source(cr, g);
 		cairo_rectangle(cr, lx, y + px * 0.6, lx2 - lx, 1);
 		cairo_fill(cr);
@@ -206,7 +204,7 @@ static void bar(cairo_t *cr, double x, double y, double w, double h, double frac
 	if (fw > 1) {
 		rrect(cr, x + 1, y + 1, fw, h - 2, (h - 2) / 2);
 		cairo_pattern_t *g = cairo_pattern_create_linear(x, 0, x + w, 0);
-		cairo_pattern_add_color_stop_rgb(g, 0, 0x1d / 255.0, 0x5a / 255.0, 0x78 / 255.0);
+		cairo_pattern_add_color_stop_rgb(g, 0, DIM_RGB);
 		cairo_pattern_add_color_stop_rgb(g, 1, ((col >> 16) & 255) / 255.0, ((col >> 8) & 255) / 255.0, (col & 255) / 255.0);
 		cairo_set_source(cr, g);
 		cairo_fill(cr);
@@ -951,9 +949,9 @@ static void header(cairo_t *cr, struct rect r, double vh)
 	rx -= txt(cr, 2 * vh, PANGO_WEIGHT_BOLD, 0.05, C_BRIGHT, 1, rx, cy, 2, 0, hm) + 14;
 	txt(cr, 1.2 * vh, PANGO_WEIGHT_NORMAL, 0.25, C_MUTED, 1, rx, cy, 2, 0, day);
 	cairo_pattern_t *g = cairo_pattern_create_linear(r.x, 0, r.x + r.w, 0);
-	cairo_pattern_add_color_stop_rgba(g, 0, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
-	cairo_pattern_add_color_stop_rgba(g, 0.5, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.6);
-	cairo_pattern_add_color_stop_rgba(g, 1, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0, ACC_RGB, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0.5, ACC_RGB, 0.6);
+	cairo_pattern_add_color_stop_rgba(g, 1, ACC_RGB, 0.0);
 	cairo_set_source(cr, g);
 	cairo_rectangle(cr, r.x, r.y + r.h - 1, r.w, 1);
 	cairo_fill(cr);

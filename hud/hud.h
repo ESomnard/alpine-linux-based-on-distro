@@ -58,6 +58,7 @@ struct output {
 	int width, height;          /* taille logique */
 	bool configured;
 	struct buffer buffers[2];
+	struct wl_callback *frame_cb; /* image envoyée, pas encore affichée */
 	cairo_surface_t *bg_cache;  /* fond + cadres des panneaux */
 	int bg_w, bg_h, bg_scale;
 	/* zones cliquables (coordonnées logiques), remplies au dessin */

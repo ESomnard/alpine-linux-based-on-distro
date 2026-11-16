@@ -113,6 +113,8 @@ static void read_net(void)
 			S.wifi = true;
 	}
 	closedir(d);
+	/* Bluetooth : segment affiché seulement s'il y a un adaptateur */
+	S.bt = access("/sys/class/bluetooth/hci0", F_OK) == 0;
 }
 
 /* mises à jour : compte écrit par « plume-maj --verifier » (root, via sudo sans
@@ -127,7 +129,7 @@ static void read_maj(void)
 		next_check = t + 120;
 	if (t >= next_check) {
 		next_check = t + 6 * 3600;
-		spawn("command -v plume-maj >/dev/null && sudo -n /usr/local/bin/plume-maj --verifier >/dev/null 2>&1");
+		spawn("command -v plume-maj >/dev/null && sudo -n /usr/bin/plume-maj --verifier >/dev/null 2>&1");
 	}
 	char b[16];
 	int n = read_line(MAJ_FICHIER, b, sizeof b) ? atoi(b) : 0;
@@ -140,6 +142,20 @@ static void read_maj(void)
 	}
 	last = n;
 	S.maj = n;
+
+	/* nouvelle version d'Alpine publiée (plume-maj --nouvelle-version) */
+	char v[16];
+	if (!read_line("/var/lib/plume/version-dispo", v, sizeof v))
+		v[0] = 0;
+	static char last_v[16];
+	if (v[0] && strcmp(v, last_v)) {
+		char cmd[220];
+		snprintf(cmd, sizeof cmd,
+			 "notify-send -a Plume 'Alpine %s est sortie' 'Clic sur ★ dans la barre pour y passer'", v);
+		spawn(cmd);
+	}
+	snprintf(last_v, sizeof last_v, "%s", v);
+	snprintf(S.maj_version, sizeof S.maj_version, "%s", v);
 }
 
 static void read_volume(void)

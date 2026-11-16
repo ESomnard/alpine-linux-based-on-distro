@@ -126,9 +126,20 @@ static struct buffer *get_buffer(struct output *o, int w, int h)
 	return NULL; /* les deux tampons sont chez le compositeur : on saute cette image */
 }
 
+/* Le compositeur prévient (frame done) quand l'image précédente est affichée.
+ * On n'en dessine pas d'autre avant : écran éteint ou caché = plus aucun dessin. */
+static void frame_done(void *data, struct wl_callback *cb, uint32_t t)
+{
+	(void)t;
+	struct output *o = data;
+	wl_callback_destroy(cb);
+	o->frame_cb = NULL;
+}
+static const struct wl_callback_listener frame_listener = { .done = frame_done };
+
 static void render_output(struct output *o)
 {
-	if (!o->configured || o->width <= 0 || o->height <= 0)
+	if (!o->configured || o->width <= 0 || o->height <= 0 || o->frame_cb)
 		return;
 	int s = o->scale > 0 ? o->scale : 1;
 	struct buffer *b = get_buffer(o, o->width * s, o->height * s);
@@ -142,6 +153,8 @@ static void render_output(struct output *o)
 	wl_surface_set_buffer_scale(o->surface, s);
 	wl_surface_attach(o->surface, b->wl, 0, 0);
 	wl_surface_damage_buffer(o->surface, 0, 0, b->w, b->h);
+	o->frame_cb = wl_surface_frame(o->surface);
+	wl_callback_add_listener(o->frame_cb, &frame_listener, o);
 	wl_surface_commit(o->surface);
 	b->busy = true;
 }
@@ -443,6 +456,8 @@ static void handle_key(xkb_keysym_t sym, const char *utf8)
 	}
 }
 
+static double last_input; /* dernière frappe ou mouvement de souris (repos = moins d'images) */
+
 static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, uint32_t size)
 {
 	(void)d; (void)k;
@@ -484,6 +499,7 @@ static void kb_key(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t, 
 	if (!H.xkb_state)
 		return;
 	uint32_t code = key + 8;
+	last_input = now_s();
 	if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		xkb_keysym_t sym = xkb_state_key_get_one_sym(H.xkb_state, code);
 		char utf8[8] = { 0 };
@@ -569,6 +585,7 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, 
 	(void)d; (void)p; (void)t;
 	H.px = wl_fixed_to_double(x);
 	H.py = wl_fixed_to_double(y);
+	last_input = now_s();
 }
 
 static void ptr_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t button, uint32_t state)
@@ -605,16 +622,31 @@ static const struct wl_pointer_listener ptr_listener = {
 /* Seat & registre                                                     */
 /* ------------------------------------------------------------------ */
 
+/* Clavier ou souris débranchés puis rebranchés (ou mis en veille) : le
+ * compositeur annonce « plus de clavier » puis « de nouveau un clavier ».
+ * L'ancien objet est mort : on le libère et on en redemande un neuf. */
 static void seat_caps(void *d, struct wl_seat *s, uint32_t caps)
 {
 	(void)d;
-	if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !H.keyboard) {
+	bool kb = caps & WL_SEAT_CAPABILITY_KEYBOARD, ptr = caps & WL_SEAT_CAPABILITY_POINTER;
+	if (kb && !H.keyboard) {
 		H.keyboard = wl_seat_get_keyboard(s);
 		wl_keyboard_add_listener(H.keyboard, &kb_listener, NULL);
+	} else if (!kb && H.keyboard) {
+		H.repeat_key = 0; /* plus de touche maintenue */
+		struct itimerspec off = { 0 };
+		if (H.repeat_fd >= 0)
+			timerfd_settime(H.repeat_fd, 0, &off, NULL);
+		wl_keyboard_release(H.keyboard);
+		H.keyboard = NULL;
 	}
-	if ((caps & WL_SEAT_CAPABILITY_POINTER) && !H.pointer) {
+	if (ptr && !H.pointer) {
 		H.pointer = wl_seat_get_pointer(s);
 		wl_pointer_add_listener(H.pointer, &ptr_listener, NULL);
+	} else if (!ptr && H.pointer) {
+		wl_pointer_release(H.pointer);
+		H.pointer = NULL;
+		H.pointer_output = NULL;
 	}
 }
 
@@ -726,6 +758,15 @@ static void on_tick(void)
 		in_lockout = false;
 		default_msg();
 	}
+
+	/* au repos (rien tapé depuis 8 s, aucune animation brève en cours) :
+	 * 5 images/s au lieu de 20 — les anneaux tournent lentement, le curseur
+	 * clignote toujours, mais le processeur se repose */
+	static unsigned skip;
+	bool calme = t - last_input > 8 && t - H.start > 3 && !H.unlocking && !H.authenticating &&
+		     !in_lockout && t - H.shake_start > 1.0;
+	if (calme && (skip++ % 4) != 0)
+		return;
 
 	if (H.unlocking && t - H.unlock_start >= 0.7) {
 		if (H.mode == MODE_LOCK) {

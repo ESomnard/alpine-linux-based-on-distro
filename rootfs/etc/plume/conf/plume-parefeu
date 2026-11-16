@@ -1,0 +1,81 @@
+#!/bin/sh
+# Plume — pare-feu (nftables) en clair.
+#   plume-parefeu                       état + ports ouverts
+#   sudo plume-parefeu ouvrir 22        ouvre un port TCP (ex. SSH)
+#   sudo plume-parefeu ouvrir 1714-1764/udp   plage, en UDP (ex. KDE Connect)
+#   sudo plume-parefeu fermer 22[/udp]
+#   sudo plume-parefeu desactiver | activer
+set -eu
+PORTS=/etc/nftables.d/plume-ports.nft
+
+root() { [ "$(id -u)" -eq 0 ] || { echo "À lancer avec sudo : sudo plume-parefeu $*" >&2; exit 1; }; }
+
+# « 22 », « 8080/tcp », « 1714-1764/udp » -> « tcp 22 »
+port_arg() {
+	p=${1%/*} proto=tcp
+	case "$1" in */udp) proto=udp ;; */tcp) ;; */*) echo "Protocole inconnu : $1 (tcp ou udp)" >&2; exit 1 ;; esac
+	echo "$p" | grep -Eq '^[0-9]{1,5}(-[0-9]{1,5})?$' || { echo "Port invalide : $p" >&2; exit 1; }
+	for n in $(echo "$p" | tr - ' '); do
+		[ "$n" -ge 1 ] && [ "$n" -le 65535 ] || { echo "Port hors limites : $n" >&2; exit 1; }
+	done
+	echo "$proto $p"
+}
+
+recharger() {
+	nft -c -f /etc/nftables.nft || { echo "Règles invalides, rien n'a été changé." >&2; return 1; }
+	rc-service nftables reload >/dev/null 2>&1 || rc-service nftables restart >/dev/null 2>&1 || nft -f /etc/nftables.nft
+}
+
+case "${1:-statut}" in
+statut)
+	if [ "$(id -u)" -eq 0 ] && nft list chain inet filter input >/dev/null 2>&1; then
+		echo "Pare-feu : ACTIF (tout ce qui entre est bloqué, sauf les réponses)"
+	elif rc-service nftables status >/dev/null 2>&1; then
+		echo "Pare-feu : ACTIF (tout ce qui entre est bloqué, sauf les réponses)"
+	else
+		echo "Pare-feu : INACTIF   (sudo plume-parefeu activer)"
+	fi
+	echo "Ports ouverts :"
+	if [ -s "$PORTS" ] && grep -q dport "$PORTS"; then
+		sed -n 's/.* \(tcp\|udp\) dport \([0-9-]*\) accept.*/  \2\/\1/p' "$PORTS"
+	else
+		echo "  aucun"
+	fi ;;
+ouvrir)
+	root "$@"; [ $# -ge 2 ] || { echo "Usage : sudo plume-parefeu ouvrir PORT[/udp]" >&2; exit 1; }
+	pa=$(port_arg "$2") || exit 1; set -- $pa
+	mkdir -p /etc/nftables.d
+	touch "$PORTS"
+	if grep -q " $1 dport $2 accept" "$PORTS"; then
+		echo "Port $2/$1 déjà ouvert."
+		exit 0
+	fi
+	echo "add rule inet filter input $1 dport $2 accept comment \"plume-parefeu\"" >> "$PORTS"
+	recharger && echo "Port $2/$1 ouvert."
+	;;
+fermer)
+	root "$@"; [ $# -ge 2 ] || { echo "Usage : sudo plume-parefeu fermer PORT[/udp]" >&2; exit 1; }
+	pa=$(port_arg "$2") || exit 1; set -- $pa
+	[ -f "$PORTS" ] && grep -q " $1 dport $2 accept" "$PORTS" || { echo "Port $2/$1 n'était pas ouvert."; exit 0; }
+	grep -v " $1 dport $2 accept" "$PORTS" > "$PORTS.tmp" || true
+	mv "$PORTS.tmp" "$PORTS"
+	recharger && echo "Port $2/$1 fermé."
+	;;
+desactiver)
+	root "$@"
+	rc-service nftables stop >/dev/null 2>&1 || true
+	nft flush ruleset 2>/dev/null || true
+	rc-update del nftables default >/dev/null 2>&1 || true
+	echo "Pare-feu désactivé (même après redémarrage). Pour le remettre : sudo plume-parefeu activer"
+	;;
+activer)
+	root "$@"
+	rc-update add nftables default >/dev/null 2>&1 || true
+	rc-service nftables start >/dev/null 2>&1 || recharger
+	echo "Pare-feu activé."
+	;;
+-h|--help|aide)
+	sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' ;;
+*)
+	echo "Commande inconnue : $1 (plume-parefeu aide)" >&2; exit 1 ;;
+esac

@@ -254,15 +254,28 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 		o->hit_vol = (struct rect){ 0 };
 	}
 
-	if (S.maj > 0) {
+	if (S.maj > 0 || S.maj_version[0]) {
 		double mx0 = rx;
-		snprintf(buf, sizeof buf, "⬆ %d", S.maj);
+		if (S.maj > 0)
+			snprintf(buf, sizeof buf, "⬆ %d", S.maj);
+		else
+			snprintf(buf, sizeof buf, "★ %s", S.maj_version);
 		seg_text(cr, &rx, cy, C_CORNER, buf);
 		seg_key(cr, &rx, cy, "MAJ");
 		o->hit_maj = (struct rect){ rx - 4, 0, mx0 - rx + 8, H };
 		sep(cr, &rx, cy);
 	} else {
 		o->hit_maj = (struct rect){ 0 };
+	}
+
+	if (S.bt) {
+		double bx0 = rx;
+		seg_text(cr, &rx, cy, C_TEXT, "ᛒ");
+		seg_key(cr, &rx, cy, "BT");
+		o->hit_bt = (struct rect){ rx - 4, 0, bx0 - rx + 8, H };
+		sep(cr, &rx, cy);
+	} else {
+		o->hit_bt = (struct rect){ 0 };
 	}
 
 	double nx0 = rx;

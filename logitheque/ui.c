@@ -1,5 +1,6 @@
 /* Logithèque Plume — dessin et interactions (style HUD). */
 #include "logitheque.h"
+#include "theme.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -10,8 +11,6 @@
 
 #define C_BG      0x02060b
 #define C_PANEL   0x07121c
-#define C_LINE    0x4fb8e0
-#define C_LINEDIM 0x1d5a78
 #define C_TEXT    0xcdeefc
 #define C_MUTED   0x5f8ea5
 #define C_OK      0x4fe0a4
@@ -21,7 +20,6 @@
 #define C_PINK    0xff8fb1
 #define C_CYAN    0x6fe3ff
 #define C_BRIGHT  0xe9f9ff
-#define C_CORNER  0x9fe4ff
 #define FONT      "JetBrains Mono, DejaVu Sans Mono, WenQuanYi Zen Hei"
 
 #define HEADER_ROW 64.0
@@ -33,7 +31,7 @@ static double HEADER_H = 64.0;
 static const char *CATS[] = { "Internet", "Bureautique", "Multimédia", "Graphisme",
 			      "Jeux", "Développement", "Utilitaires", "Système" };
 static const char *CAT_GLYPH[] = { "◎", "▤", "▶", "▣", "◆", "⌘", "⚙", "◈" };
-static const uint32_t CAT_COL[] = { C_LINE, C_OK, C_PURP, C_PINK, C_WARN, C_CYAN, C_CORNER, C_MUTED };
+static const uint32_t CAT_COL[] = { 0x4fb8e0, C_OK, C_PURP, C_PINK, C_WARN, C_CYAN, 0x9fe4ff, C_MUTED };
 #define NCATS (int)(sizeof CATS / sizeof CATS[0])
 
 /* paquets dont Plume a besoin : jamais proposés à la suppression */
@@ -253,8 +251,8 @@ static double section(cairo_t *cr, double x, double y, double w, const char *tit
 	double lx = x + tw + 12, lx2 = x + w - (rw ? rw + 12 : 0);
 	if (lx2 > lx) {
 		cairo_pattern_t *g = cairo_pattern_create_linear(lx, 0, lx2, 0);
-		cairo_pattern_add_color_stop_rgba(g, 0, 0x1d / 255.0, 0x5a / 255.0, 0x78 / 255.0, 1);
-		cairo_pattern_add_color_stop_rgba(g, 1, 0x1d / 255.0, 0x5a / 255.0, 0x78 / 255.0, 0.1);
+		cairo_pattern_add_color_stop_rgba(g, 0, DIM_RGB, 1);
+		cairo_pattern_add_color_stop_rgba(g, 1, DIM_RGB, 0.1);
 		cairo_set_source(cr, g);
 		cairo_rectangle(cr, lx, y + 10, lx2 - lx, 1);
 		cairo_fill(cr);
@@ -895,9 +893,9 @@ static void header(cairo_t *cr, int W)
 	}
 	/* filet */
 	cairo_pattern_t *g = cairo_pattern_create_linear(0, 0, W, 0);
-	cairo_pattern_add_color_stop_rgba(g, 0, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
-	cairo_pattern_add_color_stop_rgba(g, 0.5, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.55);
-	cairo_pattern_add_color_stop_rgba(g, 1, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0, ACC_RGB, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0.5, ACC_RGB, 0.55);
+	cairo_pattern_add_color_stop_rgba(g, 1, ACC_RGB, 0.0);
 	cairo_set_source(cr, g);
 	cairo_rectangle(cr, 0, HEADER_H - 1, W, 1);
 	cairo_fill(cr);

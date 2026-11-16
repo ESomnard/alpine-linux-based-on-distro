@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Apparence
+GenericName=Fond d'écran et couleur du thème
+Comment=Fonds Plume, tes images, couleur d'accent de Plume
+Exec=plume-fonds
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=fond;écran;wallpaper;arrière-plan;image;thème;couleur;apparence;

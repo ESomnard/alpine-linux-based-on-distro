@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Faux bluetoothctl pour les tests : un adaptateur, un casque associé, une manette à proximité."""
+import json, os, sys
+ST = "/tmp/bt-etat.json"
+st = json.load(open(ST)) if os.path.exists(ST) else {"pow": True, "found": False, "devs": {
+    "AA:BB:CC:11:22:33": {"n": "Casque WH-1000", "i": "audio-headset", "p": True, "c": False, "b": 70},
+    "11:22:33:44:55:66": {"n": "11-22-33-44-55-66", "i": "", "p": False, "c": False, "b": None}}}
+open("/tmp/btctl.log", "a").write(" ".join(sys.argv[1:]) + "\n")
+a = [x for x in sys.argv[1:]]
+if a[:1] == ["--timeout"]:
+    a = a[2:]
+save = lambda: json.dump(st, open(ST, "w"))
+if a == ["show"]:
+    print(f"Controller 00:1A:7D:DA:71:13 (public)\n\tName: plume\n\tAlias: plume-bt\n\tPowered: {'yes' if st['pow'] else 'no'}\n"
+          f"\tPowerState: {'on' if st['pow'] else 'off'}\n\tDiscoverable: no\n\tDiscovering: no")
+elif a == ["devices"]:
+    for m, d in st["devs"].items():
+        print(f"Device {m} {d['n']}")
+elif a[0] == "info":
+    d = st["devs"][a[1]]
+    print(f"Device {a[1]} (public)\n\tName: {d['n']}\n\tAlias: {d['n']}\n\tIcon: {d['i']}\n\tPaired: {'yes' if d['p'] else 'no'}\n"
+          f"\tBonded: {'yes' if d['p'] else 'no'}\n\tTrusted: {'yes' if d['p'] else 'no'}\n\tConnected: {'yes' if d['c'] else 'no'}")
+    if d["b"] is not None:
+        print(f"\tBattery Percentage: 0x{d['b']:02x} ({d['b']})")
+elif a == ["scan", "on"]:
+    st["devs"]["DE:AD:BE:EF:00:01"] = {"n": "Manette Xbox", "i": "input-gaming", "p": False, "c": False, "b": None}
+    print("Discovery started\n[NEW] Device DE:AD:BE:EF:00:01 Manette Xbox"); save()
+elif a[0] == "power":
+    st["pow"] = a[1] == "on"; print(f"Changing power {a[1]} succeeded"); save()
+elif a[0] == "pair":
+    st["devs"][a[1]]["p"] = True; print(f"Attempting to pair with {a[1]}\n[CHG] Device {a[1]} Paired: yes\nPairing successful"); save()
+elif a[0] == "trust":
+    print(f"Changing {a[1]} trust succeeded")
+elif a[0] == "connect":
+    st["devs"][a[1]]["c"] = True; print(f"Attempting to connect to {a[1]}\nConnection successful"); save()
+elif a[0] == "disconnect":
+    st["devs"][a[1]]["c"] = False; print("Successful disconnected"); save()
+elif a[0] == "remove":
+    del st["devs"][a[1]]; print("Device has been removed"); save()
+else:
+    print("Invalid command"); sys.exit(1)

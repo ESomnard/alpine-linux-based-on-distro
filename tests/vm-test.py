@@ -6,6 +6,7 @@ Lancé par tests/vm-test.sh dans un conteneur Alpine (python3 + py3-pexpect + qe
 2. redémarre sur le disque, lance desktop.sh, redémarre
 3. vérifie services, paquets, sway (capture d'écran), pinyin, puis slim-firmware.sh
 """
+import os
 import re
 import sys
 
@@ -14,6 +15,9 @@ import pexpect
 ISO = sys.argv[1]
 DISK = "/o/test/disk.qcow2"
 PW = "plume-test-123"
+# PLUME_TEST_CHIFFRE=1 : installation sur disque chiffré (LUKS), phrase tapée au démarrage, puis arrêt
+CHIFFRE = os.environ.get("PLUME_TEST_CHIFFRE") == "1"
+PHRASE = "phrase-test-456"
 QEMU = "qemu-system-x86_64 -accel tcg,thread=multi -cpu max -m 2048 -smp 4 -nographic"
 
 log = open("/o/test/vm.log", "w", encoding="utf-8", errors="replace", buffering=1)
@@ -101,38 +105,52 @@ vm = VM(f"-no-reboot -cdrom {ISO} -kernel /tmp/vmlinuz -initrd /tmp/initramfs "
 vm.login("root")
 step("Live OK, lancement de install.sh")
 
-iface = {"done": False}
+if os.environ.get("PLUME_TEST_INTERACTIF") == "1":
+    iface = {"done": False}
 
 
-def iface_answer(_):
-    if iface["done"]:
-        return "done\r"
-    iface["done"] = True
-    return "eth0\r"
+    def iface_answer(_):
+        if iface["done"]:
+            return "done\r"
+        iface["done"] = True
+        return "eth0\r"
 
 
-vm.run_interactive("sh /etc/plume/install.sh", [
-    (r"Disposition clavier[^:]*:", "\r"),
-    (r"Fuseau horaire[^:]*:", "\r"),
-    (r"Nom de la machine[^:]*:", "\r"),
-    (r"pour continuer", "\r"),
-    (r"Which one do you want to initialize[^\]]*\]", iface_answer),
-    (r"Ip address for eth0[^\]]*\]", "dhcp\r"),
-    (r"manual network configuration[^\]]*\]", "n\r"),
-    (r"New password:", f"{PW}\r"),
-    (r"Retype password:", f"{PW}\r"),
-    (r"Which disk\(s\) would you like to use[^\]]*\]", "vda\r"),
-    (r"How would you like to use it[^\]]*\]", "sys\r"),
-    (r"Erase the above disk[^\]]*\]", "y\r"),
-    (r"Enter ssh key[^\]]*\]", "none\r"),
-    (r"Setup a user\?[^\]]*\]", "test\r"),
-    (r"Full name for user[^\]]*\]", "\r"),
-    (r"\? *(\([^)]*\) *)?\[[^\]\n]*\] *$", "\r"),   # toute autre question : valeur par défaut
-], timeout=1200)
+    vm.run_interactive("sh /etc/plume/install.sh", [
+        (r"Disposition clavier[^:]*:", "\r"),
+        (r"Fuseau horaire[^:]*:", "\r"),
+        (r"Chiffrer le disque[^:]*:", "\r"),
+        (r"Nom de la machine[^:]*:", "\r"),
+        (r"pour continuer", "\r"),
+        (r"Which one do you want to initialize[^\]]*\]", iface_answer),
+        (r"Ip address for eth0[^\]]*\]", "dhcp\r"),
+        (r"manual network configuration[^\]]*\]", "n\r"),
+        (r"New password:", f"{PW}\r"),
+        (r"Retype password:", f"{PW}\r"),
+        (r"Which disk\(s\) would you like to use[^\]]*\]", "vda\r"),
+        (r"How would you like to use it[^\]]*\]", "sys\r"),
+        (r"Erase the above disk[^\]]*\]", "y\r"),
+        (r"Enter ssh key[^\]]*\]", "none\r"),
+        (r"Setup a user\?[^\]]*\]", "test\r"),
+        (r"Full name for user[^\]]*\]", "\r"),
+        (r"\? *(\([^)]*\) *)?\[[^\]\n]*\] *$", "\r"),   # toute autre question : valeur par défaut
+    ], timeout=1200)
+else:
+    # installation 100 % automatique (fichier de réponses, aucune question)
+    crypt = f"CHIFFREMENT=oui\\nPHRASE_CHIFFREMENT={PHRASE}\\n" if CHIFFRE else ""
+    vm.run("printf 'DISQUE=/dev/vda\\nUTILISATEUR=test\\nMOT_DE_PASSE=%s\\nBUREAU=non\\nREDEMARRER=non\\n" + crypt + "' "
+           f"'{PW}' > /tmp/auto.conf; cat /tmp/auto.conf")
+    vm.run_interactive("sh /etc/plume/install.sh --auto /tmp/auto.conf || echo INSTALL-\"\"ECHEC", [
+        (r"INSTALL-ECHEC", lambda m: die("install.sh --auto a échoué")),
+        (r"ERROR: [^\r\n]*", lambda m: (step(f"apk : {m}"), None)[1]),
+    ], timeout=1500)
+
 step("Installation sur disque terminée")
 
 # Uniquement pour le test : console série sur le système installé + sudo/doas sans mot de passe
-vm.run(r"""for p in /dev/vda1 /dev/vda2 /dev/vda3; do mount $p /mnt 2>/dev/null || continue; """
+if CHIFFRE:  # la racine est chiffrée : on l'ouvre pour la préparer
+    vm.run(f"cryptsetup isLuks /dev/vda2 && echo 'RACINE CHIFFREE (LUKS)'; printf %s '{PHRASE}' | cryptsetup open /dev/vda2 tr --key-file - && echo 'PHRASE OK'")
+vm.run(r"""for p in /dev/vda1 /dev/vda2 /dev/vda3 /dev/mapper/tr; do mount $p /mnt 2>/dev/null || continue; """
        r"""for f in /mnt/extlinux.conf /mnt/boot/extlinux.conf; do [ -f $f ] && { grep -q ttyS0 $f || sed -i -E 's/^([[:space:]]*APPEND .*)/\1 console=ttyS0,115200/' $f; }; done; """
        r"""[ -f /mnt/etc/update-extlinux.conf ] && sed -i 's/^default_kernel_opts="/&console=ttyS0,115200 /' /mnt/etc/update-extlinux.conf; """
        r"""[ -f /mnt/etc/inittab ] && { grep -q '^ttyS0' /mnt/etc/inittab || echo 'ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100' >> /mnt/etc/inittab; }; """
@@ -140,13 +158,25 @@ vm.run(r"""for p in /dev/vda1 /dev/vda2 /dev/vda3; do mount $p /mnt 2>/dev/null 
        r"""[ -d /mnt/etc/sudoers.d ] && { echo 'test ALL=(ALL) NOPASSWD: ALL' > /mnt/etc/sudoers.d/zz-test; chmod 0440 /mnt/etc/sudoers.d/zz-test; }; """
        r"""[ -d /mnt/etc/plume ] && echo "SUDO-SUR-DISQUE: $(ls /mnt/usr/bin/sudo 2>&1) $(ls -l /mnt/etc/sudoers.d/plume 2>&1)"; """
        r"""[ -d /mnt/etc/plume ] && echo "PLUME-SUR-DISQUE: $(ls /mnt/etc/plume | tr '\n' ' ')"; umount /mnt; done""")
+if CHIFFRE:
+    vm.run("cryptsetup close tr")
 vm.send("poweroff\r")
 vm.wait_eof()
 
 # ===================== Phase 2 : système installé =====================
 step("Phase 2 : démarrage sur le disque")
 vm = VM(f"-drive file={DISK},if=virtio -nic user,model=virtio-net-pci")
+if CHIFFRE:
+    vm.expect(r"[Pp]assphrase", 900, "demande de la phrase secrète au démarrage")
+    step("Phrase secrète demandée au démarrage")
+    vm.send(PHRASE + "\r")
 vm.login("test")
+if CHIFFRE:
+    vm.run("cat /proc/cmdline; ls /dev/mapper; df -h / | tail -1; sudo cryptsetup status root | head -4")
+    step("SUCCES : disque chiffré, démarrage avec la phrase secrète")
+    vm.send("sudo poweroff\r")
+    vm.wait_eof()
+    sys.exit(0)
 step("Système installé (avant desktop.sh)")
 vm.run('df -h / | tail -1; free -m | sed -n 2p; echo "paquets: $(apk info | wc -l)"')
 
@@ -167,9 +197,25 @@ vm.login("test")
 step("Vérifications après redémarrage")
 vm.run("rc-status default | grep -E 'dbus|seatd|iwd|zram'; cat /proc/swaps; id")
 vm.run('df -h / | tail -1; free -m | sed -n 2p; echo "paquets: $(apk info | wc -l)"')
-vm.run('for p in sudo apt apt-get plume-logitheque sway foot plume-term plume-terminal fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
+vm.run('for p in sudo apt apt-get plume-logitheque plume-lanceur plume-menu plume-fonds plume-wifi plume-son plume-bluetooth plume-maj plume-parefeu plume-secureboot sway foot plume-term plume-terminal fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
        'command -v $p >/dev/null && echo "OK  $p" || echo "MANQUE $p"; done; '
        'ls /usr/share/ibus/component/; ls /usr/share/fonts')
+
+step("Dépôt .apk Plume, AppArmor, Secure Boot")
+vm.run("apk list -I 2>/dev/null | grep -E '^plume-' | cut -d' ' -f1 | tr '\\n' ' '; echo; grep plume /etc/apk/repositories; "
+       "ls /usr/local/bin | grep -c plume- ; "
+       "echo \"APPARMOR: $(cat /sys/module/apparmor/parameters/enabled 2>/dev/null) "
+       "profils=$(sudo cat /sys/kernel/security/apparmor/profiles 2>/dev/null | wc -l)\"; cat /proc/cmdline; "
+       "plume-secureboot", 180)
+
+step("Sécurité : pare-feu, durcissement, mises à jour")
+vm.run("rc-status | grep -E 'nftables|sysctl'; sudo nft list chain inet filter input | grep -E 'policy|established'; "
+       "plume-parefeu; sudo plume-parefeu ouvrir 22 && sudo plume-parefeu fermer 22; "
+       "sysctl kernel.kptr_restrict kernel.dmesg_restrict kernel.yama.ptrace_scope kernel.kexec_load_disabled "
+       "net.ipv4.conf.all.rp_filter net.ipv4.tcp_syncookies; "
+       "wget -q -O /dev/null https://dl-cdn.alpinelinux.org/alpine/ && echo 'INTERNET OK (pare-feu actif)'", 180)
+vm.run("sudo -n /usr/bin/plume-maj --verifier && echo \"MAJ DISPO: $(cat /var/lib/plume/maj-dispo)\"; "
+       "plume-maj --liste | tail -4", 600)
 
 step("Écran de connexion (greetd + plume-hud)")
 vm.run('command -v plume-hud && ls -l /usr/local/bin/plume-hud; '
@@ -199,6 +245,23 @@ step("Poste de pilotage (plume-term --hud)")
 vm.run("plume-term --version; (ls -d ~/Documents ~/Bureau; plume-term --hud -e sh -c 'printf \"\\\\033[1;36mplume-term\\\\033[0m · 你好 · é\\\\n\"; ls --color=always /; exec sh' > /tmp/term.log 2>&1 &) ; sleep 20; "
        "echo \"fenetres plume-term: $(swaymsg -t get_tree | grep -c '\"app_id\": \"plume-term\"')\"; grim /tmp/term.png && ls -l /tmp/term.png; cat /tmp/term.log; pkill plume-term", 180)
 vm.run("echo ===B64START terminal===; base64 /tmp/term.png; echo ===B64END===", 900)
+
+step("Grille des applications (plume-lanceur)")
+vm.run("(plume-menu > /tmp/menu.log 2>&1 &) ; sleep 15; grim /tmp/apps.png && ls -l /tmp/apps.png; cat /tmp/menu.log; "
+       "pgrep -x plume-lanceur >/dev/null && echo 'LANCEUR OUVERT'; plume-menu; sleep 2; pgrep -x plume-lanceur >/dev/null || echo 'LANCEUR FERME'", 180)
+vm.run("echo ===B64START applications===; base64 /tmp/apps.png; echo ===B64END===", 900)
+
+step("Fond d'écran (plume-fonds)")
+vm.run("ls /usr/local/share/plume/fonds; (plume-fonds > /tmp/fonds.log 2>&1 &) ; sleep 20; grim /tmp/fonds.png && ls -l /tmp/fonds.png; "
+       "cat /tmp/fonds.log; pkill plume-fonds; mkdir -p ~/.config/plume; "
+       "printf 'fond=/usr/local/share/plume/fonds/aurore.png\\nmode=fill\\n' > ~/.config/plume/fond.conf; "
+       "plume-fonds --appliquer && echo 'FOND APPLIQUE'", 180)
+vm.run("echo ===B64START fonds===; base64 /tmp/fonds.png; echo ===B64END===", 900)
+
+step("Panneau wifi (plume-wifi)")
+vm.run("(plume-wifi > /tmp/wifi.log 2>&1 &) ; sleep 12; grim /tmp/wifi.png && ls -l /tmp/wifi.png; "
+       "cat /tmp/wifi.log; pgrep -x plume-wifi >/dev/null && echo 'WIFI OUVERT'; pkill plume-wifi", 120)
+vm.run("echo ===B64START wifi===; base64 /tmp/wifi.png; echo ===B64END===", 900)
 
 step("Logithèque Plume")
 vm.run("ls -l /usr/local/bin/plume-logitheque /usr/local/share/plume/logitheque.txt; (plume-logitheque > /tmp/lg.log 2>&1 &) ; sleep 25; "

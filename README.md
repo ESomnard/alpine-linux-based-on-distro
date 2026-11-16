@@ -89,6 +89,8 @@ traits cyan lumineux `#4fb8e0`, équerres dans les coins, police **JetBrains Mon
 | Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME ; **plume-fonds** (maison, ~80 Ko) pour en changer : 6 autres fonds Plume, couleurs unies ou tes photos |
 | Poste de pilotage | **plume-term --hud** : le terminal en plein écran, entouré des performances (CPU, cœurs, RAM, swap, réseau, disques, processus), d'un explorateur de fichiers avec recherche et d'un clavier à l'écran — `Super + x` ou `◈` dans le dock |
 | Mises à jour | **plume-maj** : la barre vérifie toute seule (2 min après l'ouverture de session, puis toutes les 6 h) et affiche **⬆ N MAJ** + une notification ; un clic ouvre la liste (ancienne → nouvelle version), puis met à jour les paquets Alpine **et** les applis Flathub ; prévient s'il faut redémarrer (nouveau noyau). En terminal : `plume-maj`, `plume-maj --liste`, `plume-maj -y` |
+| Son | **plume-son** (maison) : clic sur SON dans la barre → sortie et micro par défaut, volume de chaque appareil et de chaque application, muet ; clic du milieu = muet, molette = volume |
+| Bluetooth | **plume-bluetooth** (maison) : clic sur ᛒ BT dans la barre (si la machine a le Bluetooth) → appareils associés (connecter, déconnecter, oublier, batterie) et à proximité (associer en un clic : association, confiance, connexion) |
 | Wifi | **plume-wifi** (maison, aucune dépendance en plus) : clic sur le réseau dans la barre → réseaux visibles avec leur signal, mot de passe, réseaux connus, déconnexion, wifi activé/désactivé ; parle à **iwd** par `iwctl` |
 | Logithèque | **plume-logitheque** (maison, ~120 Ko) : installer et désinstaller des applications comme GNOME Logiciels — catalogue en français par catégories, recherche dans tous les paquets Alpine et Flathub, mises à jour ; `▦` dans le dock ou « Logithèque » dans le lanceur |
 | Terminal | **plume-term** (maison, ~150 Ko + libvterm ~100 Ko) : terminal HUD avec onglets, historique, copier/coller, couleurs complètes, et mode poste de pilotage — **foot** reste installé en secours (`Super + Maj + Entrée`) |
@@ -143,6 +145,10 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Couleur du thème (`plume-theme`) | 🟡 Testé dans un sway virtuel : changement en direct, choix enregistré ; les 5 applis Plume compilées avec le thème, installées et lancées en VM |
 | Pack émulation (`plume-emulation`) | 🟡 Installation Alpine testée dans un Alpine vierge (tous les paquets existent, groupe `input`) ; partie Flathub et vrais jeux non testés |
 | Installation 100 % automatique (`install.sh --auto`) | ✅ Testée en VM (câble, aucune question) ; wifi et installation du bureau au premier démarrage pas encore testés |
+| Dépôt `.apk` Plume (`make depot`) | 🟡 11 paquets signés (plume-hud, plume-shell, plume-term, plume-lanceur, plume-fonds, plume-wifi, plume-son, plume-bluetooth, plume-logitheque, plume-outils, méta-paquet plume-bureau). Testé dans un conteneur : `apk add plume-bureau` installe tout avec les dépendances, et une version plus récente du dépôt arrive avec `apk upgrade` (r7 → r99). Embarqué dans l'ISO, utilisé par desktop.sh (compilation sur place en secours) |
+| `plume-son`, `plume-bluetooth` | 🟡 Testés dans un sway virtuel avec de faux wpctl / bluetoothctl (`tests/panneaux-preview.sh`, 11 vérifications) ; pas encore sur du vrai matériel |
+| AppArmor | 🟡 Activé par desktop.sh (ligne de démarrage + service) ; vérification en VM ajoutée au test |
+| Secure Boot (`plume-secureboot`) | 🟡 Préparation testée dans un conteneur (clés sbctl, image UEFI signée et vérifiée par sbverify) ; inscription des clés et démarrage réel non testés (il faut un PC UEFI) |
 | `plume-maj` (mises à jour) | 🟡 Testé dans un conteneur Alpine 3.24.0 : 7 mises à jour trouvées et listées, `-y` les installe, compte remis à 0, vérification sans mot de passe autorisée et toute autre commande refusée ; indicateur de la barre compilé mais pas encore vu en VM |
 | `plume-wifi` (panneau wifi) | 🟡 Testé dans un sway virtuel avec un faux iwd (`tests/wifi-preview.sh`) : liste, mauvais puis bon mot de passe, réseau connu, déconnexion, wifi désactivé ; pas encore sur une vraie carte wifi |
 | `plume-fonds` (fond d'écran) | 🟡 Testé dans un sway virtuel (`tests/fonds-preview.sh`) : fonds Plume, mode Ajuster, photo JPEG, choix gardé après rechargement de sway, image supprimée sans erreur ; testé en VM (fonds générés, fenêtre, réapplication au démarrage) |
@@ -208,6 +214,10 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   └── main.c tab.c render.c hud.c sysinfo.c term.h hud.h Makefile
 ├── fonds/                        # plume-fonds : choisir le fond d'écran (+ 6 fonds Plume générés)
 │   └── main.c ui.c images.c gen.c fonds.h Makefile
+├── son/                          # plume-son : panneau son HUD (PipeWire par wpctl)
+├── bluetooth/                    # plume-bluetooth : panneau Bluetooth HUD (bluez par bluetoothctl)
+├── build/publier-depot.sh        # prépare la publication du dépôt .apk sur GitHub Pages
+├── paquets/VERSION               # version des paquets .apk Plume (make depot)
 ├── wifi/                         # plume-wifi : panneau wifi HUD (iwd par iwctl)
 │   └── main.c ui.c iwd.c wifi.h Makefile
 ├── lanceur/                      # plume-lanceur : toutes les applications en grille (à la GNOME)
@@ -559,6 +569,18 @@ Les touches mortes de l'AZERTY marchent (`^` puis `e` = `ê`).
 3. Choisis les caractères avec `Espace` ou les chiffres : 你好.
 4. `Super + Espace` pour revenir à la saisie normale.
 
+### Sécurité
+
+| Protection | Ce qu'elle fait | Comment s'en servir |
+|---|---|---|
+| **Pare-feu** (nftables, actif par défaut) | Rien n'entre depuis le réseau, sauf les réponses à ce que tu as demandé. Tout ce qui sort est permis : navigation, jeux en ligne et mises à jour marchent normalement. | `plume-parefeu` (état) · `sudo plume-parefeu ouvrir 22` · `sudo plume-parefeu ouvrir 1714-1764/udp` · `sudo plume-parefeu fermer 22` · `desactiver` / `activer` |
+| **Noyau durci** (`/etc/sysctl.d/60-plume.conf`) | Cache les adresses et le journal du noyau. Interdit d'espionner un autre programme (ptrace), réserve eBPF à root, bloque kexec. Refuse les redirections réseau et les adresses usurpées, et résiste aux inondations SYN. Flatpak, Steam et Docker marchent toujours. | Rien à faire |
+| **Disque chiffré** (LUKS2, en option) | Sans ta phrase secrète, personne ne lit tes fichiers, même avec le PC volé ou le disque retiré. Elle est demandée à chaque démarrage, avant l'écran de connexion. **Oubliée = données perdues.** | À l'installation : réponds `o` à « Chiffrer le disque », ou mets `CHIFFREMENT="oui"` + `PHRASE_CHIFFREMENT` dans le fichier de `--auto` |
+| **Mises à jour** | La barre affiche **⬆ N MAJ** dès que des correctifs sont publiés, et **★ 3.xx** quand une nouvelle version d'Alpine sort. | Clic sur ⬆ ou ★, ou `plume-maj` / `plume-maj --nouvelle-version` |
+| **AppArmor** | Confinement des programmes par profils, activé au démarrage (`lsm=…,apparmor`). Les profils fournis par Alpine visent surtout des serveurs ; Firefox, Chromium, Discord… y sont pour l'instant « non confinés ». Le profil de `unix_chkpwd` est désactivé par précaution : il vérifie le mot de passe de l'écran de verrouillage et n'a pas été éprouvé avec musl. Coût : Python 3 (~45 Mo), exigé par le paquet `apparmor` d'Alpine. | État : `cat /sys/module/apparmor/parameters/enabled` (Y) · retirer : `sudo apk del apparmor apparmor-profiles` |
+| **Démarrage sécurisé** (Secure Boot, UEFI, en option) | Tes propres clés. Le noyau, l'initramfs et la ligne de démarrage forment une seule image signée, refaite et re-signée à chaque mise à jour du noyau. Les clés Microsoft sont gardées (cartes graphiques, Windows en double démarrage). | `plume-secureboot` (état) · `sudo plume-secureboot activer` (firmware en « mode configuration ») · `sudo plume-secureboot preparer` |
+| **Pas de root direct** | En installation auto, le compte root est verrouillé : tout passe par `sudo` et ton mot de passe. Aucun serveur (SSH…) n'écoute. | — |
+
 ### Apparence : fond d'écran et couleur du thème (plume-fonds)
 
 « Apparence » dans la grille des applications (`Super + a`) :
@@ -714,7 +736,8 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Problème | Détails |
 |---|---|---|
-| 🟠 | **plume-hud : le clavier ne répond plus s'il est débranché puis rebranché pendant l'écran de connexion ou de verrouillage** | **Quand ça arrive :** sur un PC avec un clavier USB (ou sans fil avec dongle), si le clavier est débranché puis rebranché, ou se met en veille puis se reconnecte, alors que l'écran de connexion ou de verrouillage est affiché. Un portable n'est pas concerné tant qu'on utilise son clavier intégré, qui ne disparaît jamais.<br>**Ce qu'on voit :** l'écran reste affiché mais les frappes ne font plus rien : impossible de taper son mot de passe, donc de se connecter ou de déverrouiller. La souris peut avoir le même problème.<br>**Pourquoi :** quand le dernier clavier disparaît, le compositeur (sway ou cage) annonce qu'il n'y a « plus de clavier », puis « de nouveau un clavier » au rebranchement. Une appli Wayland doit alors abandonner l'ancien objet clavier, devenu inerte, et en demander un nouveau. plume-hud garde l'ancien et n'en redemande jamais (`seat_caps` dans `hud/main.c`).<br>**Contournement en attendant (non testé) :** relancer plume-hud, car une nouvelle copie récupère le clavier rebranché. `Ctrl + Alt + F2`, se connecter en mode texte, puis : écran de connexion → `sudo rc-service greetd restart` ; écran de verrouillage → `pkill plume-hud && WAYLAND_DISPLAY=wayland-1 plume-hud --lock &`, puis revenir sur l'écran de sway (`Ctrl + Alt + F7` avec greetd, `F1` sinon). Attention : tuer plume-hud sans le relancer laisse la session verrouillée sans rien pour taper le mot de passe (c'est voulu, pour la sécurité). En dernier recours : redémarrer (le travail non enregistré est perdu).<br>**Correction :** une dizaine de lignes, comme celle déjà faite dans plume-term : libérer l'ancien clavier ou l'ancienne souris quand ils disparaissent, en redemander un quand ils reviennent. Rien ne change à l'apparence. |
+| ✅ | **plume-hud : clavier débranché puis rebranché** (corrigé) | L'écran de connexion et de verrouillage abandonne l'ancien clavier ou l'ancienne souris quand ils disparaissent et en reprend un neuf au retour. Testé (`tests/hud-cpu-inside.sh`) : un 1er clavier tape un mauvais mot de passe puis disparaît, un 2e tape le bon et déverrouille ; l'ancienne version restait bloquée. |
+| ✅ | **plume-hud : processeur** (corrigé) | Il redessinait tout l'écran 20 fois par seconde, même écran éteint. Il attend maintenant que l'image soit affichée, et ralentit à 5 images/s après 8 s sans frappe. Mesuré en 1920×1080 (rendu logiciel) : **42 % → 11 %** écran allumé, **42 % → 0 %** écran éteint, apparence identique. |
 
 ### Stabilité et matériel
 
@@ -727,9 +750,10 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Tâche |
 |---|---|
-| 🟠 | **Sécuriser la distro** : pare-feu activé par défaut (nftables : tout bloquer en entrée sauf ce qui est demandé), chiffrement du disque en option dans `install.sh` (`setup-disk -e`), services réduits au strict nécessaire, réglages noyau durcis (`sysctl`) |
-| 🟡 | **Mises à jour simples** : ✅ `plume-maj` + ⬆ MAJ dans la barre (paquets Alpine + Flatpak) ; reste : mettre à jour les outils Plume eux-mêmes (dépôt .apk Plume) et le passage à une nouvelle version d'Alpine |
-| 🟢 | Dépôt `.apk` Plume pour mettre à jour les configs et les outils maison avec `apk upgrade` |
+| ✅ | **Sécuriser la distro** : pare-feu nftables (`plume-parefeu`), noyau durci (`sysctl`), disque chiffré LUKS2 en option, AppArmor, Secure Boot avec tes clés (`plume-secureboot`). Reste : de vrais profils AppArmor pour Firefox et les applis |
+| ✅ | **Mises à jour simples** : `plume-maj` + ⬆ MAJ dans la barre (paquets Alpine + Flatpak), passage à la version suivante d'Alpine (`plume-maj --nouvelle-version`, ★ dans la barre). Reste : les outils Plume eux-mêmes (dépôt .apk ci-dessous) |
+| ✅ | Dépôt `.apk` Plume (`make depot`, signé, embarqué dans l'ISO), publication sur GitHub Pages préparée par `./build/publier-depot.sh` |
+| 🟢 | **Plus tard (optionnel) : publication automatique du dépôt** — une GitHub Action qui reconstruit et publie le dépôt à chaque push. Il faudrait confier la clé privée de signature aux *secrets* GitHub : pratique, mais la clé ne serait plus seulement chez toi. En attendant : `./build/publier-depot.sh` à la main |
 
 ### Applications
 
@@ -762,3 +786,41 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 - iwd : https://wiki.alpinelinux.org/wiki/Iwd
 - ISO personnalisée : https://wiki.alpinelinux.org/wiki/How_to_make_a_custom_ISO_image_with_mkimage
 - Recherche de paquets : https://pkgs.alpinelinux.org
+
+## Publier le dépôt .apk Plume (GitHub Pages)
+
+Les outils Plume (barre, terminal, panneaux, écran de connexion…) sont des paquets
+.apk signés. Une copie est dans l'ISO. Pour que les PC déjà installés reçoivent les
+nouvelles versions avec `plume-maj`, le dépôt est publié sur GitHub Pages :
+`https://esomnard.github.io/alpine-linux-based-on-distro/plume` (déjà indiqué dans
+`/etc/plume/depot.conf`, ajouté à `/etc/apk/repositories` par desktop.sh).
+
+**Une seule fois** : sur GitHub, *Settings → Pages → Source : Deploy from a branch*,
+branche **gh-pages**, dossier **/ (root)**. Le dépôt GitHub doit être public (compte gratuit).
+
+**À chaque nouvelle version** :
+
+```sh
+./build/publier-depot.sh        # construit le dépôt signé dans out/gh-pages (branche gh-pages)
+git -C out/gh-pages commit -m "Dépôt Plume 1.0.0-rN"     # commandes affichées par le script
+git -C out/gh-pages push -u origin gh-pages
+```
+
+La version des paquets vient de `paquets/VERSION` et du nombre de commits (`-rN`) :
+chaque nouveau commit publié devient une mise à jour pour apk.
+
+> ⚠️ **Sauvegarde le dossier `cles/`** (clé privée de signature, jamais dans git) hors de
+> ce PC. Si elle est perdue, les PC installés refuseront les paquets signés avec une
+> nouvelle clé. La confiance repose sur cette signature, pas sur l'hébergeur : même un
+> GitHub piraté ne pourrait pas faire installer un faux paquet.
+
+## Licence
+
+Plume Linux (les outils maison : plume-hud, plume-shell, plume-term, plume-lanceur,
+plume-fonds, plume-wifi, plume-son, plume-bluetooth, la Logithèque, les scripts et
+la configuration) est un logiciel libre sous **GNU GPL version 3 ou ultérieure**
+(`GPL-3.0-or-later`) — voir [LICENSE](LICENSE).
+
+Tu peux l'utiliser, l'étudier, le modifier et le redistribuer. Si tu distribues une
+version modifiée, tu dois la publier sous la même licence, avec ses sources.
+Alpine Linux et les logiciels qu'elle fournit gardent leurs propres licences.

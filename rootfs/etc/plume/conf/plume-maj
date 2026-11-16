@@ -3,6 +3,7 @@
 #   plume-maj                 liste les mises à jour, demande, puis met tout à jour
 #   plume-maj -y              sans question
 #   plume-maj --liste         liste seulement
+#   plume-maj --nouvelle-version   passe à la version suivante d'Alpine (3.24 -> 3.25)
 #   plume-maj --verifier      (root) relit les dépôts et compte les mises à jour
 #                             dans /var/lib/plume/maj-dispo — lancé tout seul par
 #                             la barre, toutes les 6 h, sans mot de passe (sudoers)
@@ -10,16 +11,36 @@
 set -u
 
 ETAT=/var/lib/plume/maj-dispo
+VERSION_DISPO=/var/lib/plume/version-dispo
+REPOS=/etc/apk/repositories
 
 compter() { apk list -u 2>/dev/null | grep -c . ; }
+
+# branche suivie (v3.24) et la suivante (v3.25) ; rien pour « edge »
+branche() { grep -o 'v[0-9]*\.[0-9]*' "$REPOS" 2>/dev/null | head -1; }
+suivante() {
+	b=$(branche)
+	[ -n "$b" ] || return 1
+	maj=${b#v}; maj=${maj%%.*}; min=${b##*.}
+	echo "v$maj.$((min + 1))"
+}
+# la version suivante est-elle publiée sur le miroir ? (son index main existe)
+version_publiee() {
+	m=$(grep -m1 "/$(branche)/main" "$REPOS" | sed "s|/$(branche)/main.*||")
+	[ -n "$m" ] || return 1
+	wget -q --spider -T 15 "$m/$1/main/$(apk --print-arch)/APKINDEX.tar.gz" 2>/dev/null
+}
 
 if [ "${1:-}" = --verifier ]; then
 	[ "$(id -u)" -eq 0 ] || { echo "plume-maj --verifier : à lancer en root (sudo)" >&2; exit 1; }
 	mkdir -p /var/lib/plume
-	# pas de réseau : on garde l'ancien compte
-	apk update -q >/dev/null 2>&1 || exit 0
+	# un dépôt injoignable (réseau coupé, dépôt Plume pas encore publié) n'empêche
+	# pas de compter avec les autres et les index déjà téléchargés
+	apk update -q >/dev/null 2>&1 || true
 	n=$(compter)
 	printf '%s\n' "${n:-0}" > "$ETAT.tmp" && chmod 644 "$ETAT.tmp" && mv "$ETAT.tmp" "$ETAT"
+	s=$(suivante) && version_publiee "$s" && echo "${s#v}" > "$VERSION_DISPO" || rm -f "$VERSION_DISPO"
+	[ -f "$VERSION_DISPO" ] && chmod 644 "$VERSION_DISPO"
 	exit 0
 fi
 
@@ -43,11 +64,41 @@ fin() {
 	exit "$1"
 }
 
+if [ "${1:-}" = --nouvelle-version ]; then
+	b=$(branche)
+	s=$(suivante) || { echo "Branche Alpine introuvable dans $REPOS (edge ?)." >&2; fin 1; }
+	titre "Passage d'Alpine ${b#v} à ${s#v}"
+	if ! version_publiee "$s"; then
+		echo "Alpine ${s#v} n'est pas encore publiée (ou pas de connexion). Rien n'a été changé."
+		fin 0
+	fi
+	cat <<INFO
+Tous les paquets passent à Alpine ${s#v} (une version tous les 6 mois, la ${b#v}
+reçoit encore les correctifs de sécurité environ 2 ans). Compte 5 à 20 minutes,
+garde le PC branché, puis redémarre. Une copie des dépôts est gardée dans
+$REPOS.${b#v}.
+INFO
+	printf '\nContinuer ? [o/N] '
+	read -r rep || rep=n
+	case "$rep" in [oOyY]*) ;; *) echo "Rien n'a été changé."; fin 0 ;; esac
+	$SUDO cp "$REPOS" "$REPOS.${b#v}"
+	$SUDO sed -i "s|/$b/|/$s/|g" "$REPOS"
+	if $SUDO apk update && $SUDO apk upgrade --available; then
+		$SUDO -n /usr/bin/plume-maj --verifier 2>/dev/null || true
+		printf '\n%s✔ Plume tourne maintenant sur Alpine %s. Redémarre pour finir.%s\n' "$V" "${s#v}" "$N"
+		fin 0
+	fi
+	printf '\n%s✖ Échec : retour aux dépôts %s.%s\n' "$R" "${b#v}" "$N"
+	$SUDO cp "$REPOS.${b#v}" "$REPOS"
+	$SUDO apk update -q || true
+	echo "Les paquets déjà passés en ${s#v} restent ; relance plus tard « plume-maj --nouvelle-version »."
+	fin 1
+fi
+
 titre "Mises à jour de Plume"
 echo "Lecture des dépôts Alpine…"
 if ! $SUDO apk update -q; then
-	printf '%sImpossible de joindre les dépôts : vérifie la connexion internet.%s\n' "$R" "$N"
-	fin 1
+	printf '%sUn ou plusieurs dépôts sont injoignables (connexion internet ?) : on continue avec les autres.%s\n' "$J" "$N"
 fi
 
 LISTE=$(apk list -u 2>/dev/null)
@@ -58,9 +109,21 @@ if command -v flatpak >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
 fi
 NBF=$(printf '%s' "$FLAT" | grep -c .)
 
+NOUV=""
+[ -s "$VERSION_DISPO" ] && NOUV=$(cat "$VERSION_DISPO")
+annonce() {
+	[ -n "$NOUV" ] && printf '\n%s★ Alpine %s est sortie : « plume-maj --nouvelle-version » pour y passer.%s\n' "$J" "$NOUV" "$N"
+	return 0
+}
 if [ "$NB" -eq 0 ] && [ "$NBF" -eq 0 ]; then
 	printf '%s✔ Tout est à jour.%s\n' "$V" "$N"
-	$SUDO -n /usr/local/bin/plume-maj --verifier 2>/dev/null || true
+	annonce
+	if [ -n "$NOUV" ] && [ -t 0 ] && [ "${1:-}" != --liste ] && [ "${1:-}" != -y ]; then
+		printf 'Y passer maintenant ? [o/N] '
+		read -r rep || rep=n
+		case "$rep" in [oOyY]*) exec "$0" --nouvelle-version ;; esac
+	fi
+	$SUDO -n /usr/bin/plume-maj --verifier 2>/dev/null || true
 	fin 0
 fi
 
@@ -74,7 +137,7 @@ if [ "$NBF" -gt 0 ]; then
 	titre "$NBF appli(s) Flathub"
 	printf '%s\n' "$FLAT" | sed 's/^/  /'
 fi
-[ "${1:-}" = --liste ] && fin 0
+if [ "${1:-}" = --liste ]; then annonce; fin 0; fi
 
 if [ "${1:-}" != -y ]; then
 	printf '\nMettre à jour maintenant ? [O/n] '
@@ -91,10 +154,11 @@ if [ "$NBF" -gt 0 ]; then
 	titre "Mise à jour des applis Flathub"
 	flatpak update --user -y --noninteractive || OK=0
 fi
-$SUDO -n /usr/local/bin/plume-maj --verifier 2>/dev/null || $SUDO /usr/local/bin/plume-maj --verifier || true
+$SUDO -n /usr/bin/plume-maj --verifier 2>/dev/null || $SUDO /usr/bin/plume-maj --verifier || true
 
 if [ "$OK" = 1 ]; then
 	printf '\n%s✔ Mises à jour terminées.%s\n' "$V" "$N"
+	annonce
 else
 	printf '\n%s✖ Une partie des mises à jour a échoué (voir ci-dessus).%s\n' "$R" "$N"
 fi

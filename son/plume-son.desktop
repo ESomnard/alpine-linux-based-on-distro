@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Son
+Comment=Volume, haut-parleurs, casque et micro
+Exec=plume-son
+Icon=audio-volume-high
+Terminal=false
+Categories=Settings;Audio;
+Keywords=son;volume;audio;micro;casque;haut-parleur;

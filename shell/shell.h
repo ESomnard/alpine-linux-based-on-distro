@@ -80,7 +80,7 @@ struct output {
 	char name[32];
 	struct surf bar, dock;
 	/* zones cliquables (coordonnées logiques de chaque surface) */
-	struct rect hit_logo, hit_ws[MAX_WS], hit_kb, hit_net, hit_vol, hit_power, hit_maj;
+	struct rect hit_logo, hit_ws[MAX_WS], hit_kb, hit_net, hit_vol, hit_power, hit_maj, hit_bt;
 	struct rect hit_app[MAX_APPS];
 	struct rect dock_panel;
 };
@@ -131,7 +131,8 @@ struct shell {
 	/* système */
 	int cpu, ram, bat, vol;
 	int maj;            /* mises à jour disponibles (plume-maj) */
-	bool charging, online, wifi, muted;
+	char maj_version[16]; /* nouvelle version d'Alpine publiée, ex. « 3.25 » */
+	bool charging, online, wifi, muted, bt;
 	int cpu_hist[CPU_HIST];
 	unsigned long long prev_idle, prev_total;
 

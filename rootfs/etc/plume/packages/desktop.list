@@ -3,8 +3,12 @@ sway swaybg swayidle swaylock   # swaylock = secours si plume-hud manque
 greetd greetd-openrc cage       # écran de connexion : greetd lance plume-hud dans cage (~4 Mo)
 foot            # terminal de secours (Super+Maj+Entrée)
 libvterm        # moteur de plume-term, le terminal HUD (~100 Ko)
-fuzzel          # lanceur d'applications
+fuzzel          # lanceur d'applications de secours (la grille plume-lanceur est compilée)
+librsvg         # icônes SVG de la grille des applications
+gdk-pixbuf      # images JPEG/PNG/WebP pour le choix du fond d'écran
 mako libnotify  # notifications
+nftables        # pare-feu (plume-parefeu)
+apparmor apparmor-openrc apparmor-profiles  # confinement des programmes (tire python3, ~45 Mo)
 grim slurp      # captures d'écran
 wl-clipboard    # presse-papiers
 mesa-dri-gallium mesa-va-gallium   # pilotes graphiques libres + accélération vidéo
@@ -19,4 +23,4 @@ pipewire wireplumber pipewire-pulse pipewire-alsa
 # Décommente si tu en as besoin :
 # xwayland                 # applis X11 anciennes
 # xdg-desktop-portal-wlr   # partage d'écran (visio)
-# bluez bluez-openrc       # bluetooth
+bluez bluez-openrc  # bluetooth (panneau plume-bluetooth)

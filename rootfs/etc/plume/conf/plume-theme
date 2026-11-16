@@ -1,0 +1,33 @@
+#!/bin/sh
+# Plume — couleur du thème : plume-theme cyan|emeraude|violet|ambre|rouge|rose
+# Change l'accent des applis Plume (barre, dock, terminal, grille, Logithèque)
+# et de sway, foot, fuzzel, mako. L'écran de connexion garde son cyan.
+set -eu
+case "${1:-}" in
+cyan)     A=4fb8e0 D=1d5a78 B=9fe4ff ;;
+emeraude) A=4fe0a4 D=1d6a4f B=9ff0cf ;;
+violet)   A=b48cff D=4a3a78 B=d8c4ff ;;
+ambre)    A=e6b450 D=6b5226 B=f5d9a0 ;;
+rouge)    A=ff5470 D=7a2636 B=ffa3b3 ;;
+rose)     A=ff8fb1 D=7a4256 B=ffc4d6 ;;
+*) echo "Usage : plume-theme cyan|emeraude|violet|ambre|rouge|rose" >&2; exit 2 ;;
+esac
+CONF="$HOME/.config/plume/theme.conf"
+# couleurs actuelles (cyan si rien n'a encore été choisi)
+OA=4fb8e0 OD=1d5a78 OB=9fe4ff
+if [ -f "$CONF" ]; then
+	OA=$(sed -n 's/^accent=#\{0,1\}//p' "$CONF"); OD=$(sed -n 's/^dim=#\{0,1\}//p' "$CONF"); OB=$(sed -n 's/^bright=#\{0,1\}//p' "$CONF")
+fi
+mkdir -p "$HOME/.config/plume"
+printf '# Plume — thème choisi avec plume-theme\nnom=%s\naccent=%s\ndim=%s\nbright=%s\n' "$1" "$A" "$D" "$B" > "$CONF"
+# remplace les anciennes couleurs par les nouvelles dans les configs de l'utilisateur
+for f in "$HOME/.config/sway/config" "$HOME/.config/foot/foot.ini" "$HOME/.config/fuzzel/fuzzel.ini" "$HOME/.config/mako/config"; do
+	[ -f "$f" ] || continue
+	sed -i "s/$OA/$A/gI; s/$OD/$D/gI; s/$OB/$B/gI" "$f"
+done
+# appliquer tout de suite : sway (bordures, barre et dock redémarrés), notifications
+if [ -n "${SWAYSOCK:-}" ] || ls "${XDG_RUNTIME_DIR:-/tmp}"/sway-ipc.* >/dev/null 2>&1; then
+	swaymsg reload >/dev/null 2>&1 || true
+fi
+makoctl reload >/dev/null 2>&1 || true
+echo "Thème : $1"

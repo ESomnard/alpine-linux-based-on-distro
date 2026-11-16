@@ -61,6 +61,17 @@ SuperTux | Jeux | supertux | org.supertuxproject.SuperTux | | Jeu de plateforme 
 Luanti | Jeux | luanti | | | Monde de blocs infini (anciennement Minetest)
 0 A.D. | Jeux | | com.play0ad.zeroad | | Stratégie historique en temps réel
 
+# --- Émulateurs : le meilleur pour chaque console (pack : sudo plume-emulation) ---
+mGBA | Jeux | mgba-qt | io.mgba.mGBA | | Émulateur Game Boy, Game Boy Color et Game Boy Advance
+melonDS | Jeux | melonds | net.kuribo64.melonDS | | Émulateur Nintendo DS
+Mesen | Jeux | | ca.mesen.Mesen | | Émulateur NES, Super Nintendo, Game Boy et PC Engine
+Rosalie's Mupen GUI | Jeux | | com.github.Rosalie241.RMG | | Émulateur Nintendo 64
+Cemu | Jeux | | info.cemu.Cemu | | Émulateur Wii U
+Azahar | Jeux | | org.azahar_emu.Azahar | | Émulateur Nintendo 3DS
+RPCS3 | Jeux | | net.rpcs3.RPCS3 | | Émulateur PlayStation 3
+xemu | Jeux | | app.xemu.xemu | | Émulateur Xbox (première génération)
+Flycast | Jeux | | org.flycast.Flycast | | Émulateur Dreamcast
+
 # --- Développement ---
 Visual Studio Code | Développement | | com.visualstudio.code | | Éditeur de code de Microsoft
 Geany | Développement | geany | org.geany.Geany | | Éditeur de code léger et rapide
@@ -83,7 +94,7 @@ btop | Utilitaires | btop | | btop | Moniteur système du terminal
 Flatseal | Utilitaires | | com.github.tchx84.Flatseal | | Gère les permissions des applis Flatpak
 
 # --- Système ---
-Wifi (iwgtk) | Système | iwgtk | | | Réglages du wifi en mode graphique
+Wifi (iwgtk) | Système | iwgtk | | | Autre panneau wifi, en GTK4 (Plume a déjà le sien : plume-wifi)
 Son (pavucontrol) | Système | pavucontrol | | | Réglage fin du son et des périphériques audio
 Bluetooth (blueman) | Système | blueman | | | Appareils Bluetooth
 Imprimantes | Système | system-config-printer | | | Ajouter et régler des imprimantes

@@ -39,6 +39,22 @@ mkdir -p "$BUILD_HOME/rootfs/etc/plume/shell"
 cp /work/shell/*.c /work/shell/*.h /work/shell/Makefile "$BUILD_HOME/rootfs/etc/plume/shell/"
 mkdir -p "$BUILD_HOME/rootfs/etc/plume/term"
 cp /work/term/*.c /work/term/*.h /work/term/Makefile "$BUILD_HOME/rootfs/etc/plume/term/"
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/fonds"
+cp /work/fonds/*.c /work/fonds/*.h /work/fonds/Makefile /work/fonds/plume-fonds.desktop "$BUILD_HOME/rootfs/etc/plume/fonds/"
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/wifi"
+cp /work/wifi/*.c /work/wifi/*.h /work/wifi/Makefile /work/wifi/plume-wifi.desktop "$BUILD_HOME/rootfs/etc/plume/wifi/"
+for p in son bluetooth; do
+	mkdir -p "$BUILD_HOME/rootfs/etc/plume/$p"
+	cp /work/$p/*.c /work/$p/*.h /work/$p/Makefile /work/$p/*.desktop "$BUILD_HOME/rootfs/etc/plume/$p/"
+done
+# dépôt .apk Plume (make depot) : desktop.sh installe les composants depuis lui
+if [ -f /work/out/depot/plume/x86_64/APKINDEX.tar.gz ]; then
+	mkdir -p "$BUILD_HOME/rootfs/etc/plume/depot"
+	cp -r /work/out/depot/plume/. "$BUILD_HOME/rootfs/etc/plume/depot/"
+	echo "==> Dépôt Plume embarqué : $(ls /work/out/depot/plume/x86_64/*.apk | wc -l) paquets"
+fi
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/lanceur"
+cp /work/lanceur/*.c /work/lanceur/*.h /work/lanceur/Makefile "$BUILD_HOME/rootfs/etc/plume/lanceur/"
 mkdir -p "$BUILD_HOME/rootfs/etc/plume/logitheque"
 cp /work/logitheque/*.c /work/logitheque/*.h /work/logitheque/Makefile /work/logitheque/catalogue.txt \
 	/work/logitheque/plume-logitheque.desktop "$BUILD_HOME/rootfs/etc/plume/logitheque/"

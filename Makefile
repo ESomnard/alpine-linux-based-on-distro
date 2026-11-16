@@ -1,9 +1,12 @@
 # Plume Linux — distro ultra-légère basée sur Alpine
 ARCH ?= x86_64
 
-.PHONY: iso run test vm vm-live clean
+.PHONY: iso depot run test vm vm-live clean
 
-iso:            ## Construit l'ISO dans out/ (via Docker)
+depot:          ## Construit le dépôt .apk Plume signé dans out/depot/ (via Docker)
+	./build/depot.sh
+
+iso: depot      ## Construit l'ISO dans out/ (via Docker), avec le dépôt Plume
 	ARCH=$(ARCH) ./build/build-iso.sh
 
 run:            ## Teste l'ISO dans QEMU

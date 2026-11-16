@@ -2,8 +2,8 @@
 set $mod Mod4
 # terminal HUD (plume-term), foot en secours
 set $term plume-terminal
-# fuzzel voit aussi les applis Flatpak installées par la Logithèque
-set $menu env XDG_DATA_DIRS=$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share fuzzel
+# toutes les applications en grille, à la GNOME (plume-lanceur ; fuzzel en secours)
+set $menu plume-menu
 # Écran de verrouillage HUD (plume-hud) ; swaylock en secours
 set $lock plume-hud -f || swaylock -f -c 1e1e2e
 
@@ -23,9 +23,14 @@ input type:touchpad {
 # fond d'écran HUD (généré par plume-wall), couleur unie en secours
 output * bg #02060b solid_color
 output * bg /usr/share/plume/wallpaper.png fill
+# fond choisi avec plume-fonds (« Fond d'écran » dans les applications) ;
+# réappliqué seulement si l'image existe encore, sinon le fond Plume reste
+exec_always plume-fonds --appliquer
 font pango:JetBrains Mono 10
 default_border pixel 2
 default_floating_border pixel 2
+# panneau wifi (clic sur le réseau dans la barre) : petite fenêtre flottante
+for_window [app_id="plume-wifi|plume-son|plume-bluetooth"] floating enable, resize set 560 600, move position center
 titlebar_padding 10 4
 gaps inner 10
 gaps outer 6
@@ -49,6 +54,7 @@ exec swayidle -w \
 bindsym $mod+Return exec $term
 bindsym $mod+Shift+Return exec foot
 bindsym $mod+d exec $menu
+bindsym $mod+a exec $menu
 bindsym $mod+b exec firefox
 bindsym $mod+e exec pcmanfm
 # poste de pilotage HUD : performances, fichiers, clavier

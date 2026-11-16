@@ -1,0 +1,8 @@
+#!/bin/sh
+# Plume — toutes les applications : grille plein écran (plume-lanceur), fuzzel en secours.
+if command -v plume-lanceur >/dev/null 2>&1; then
+	exec plume-lanceur "$@"
+fi
+# fuzzel voit aussi les applis Flatpak
+export XDG_DATA_DIRS="$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+exec fuzzel "$@"

@@ -8,7 +8,7 @@ ISO="$(ls -t out/*.iso 2>/dev/null | head -1)"
 [ -n "$ISO" ] || { echo "Aucune ISO dans out/ — lance d'abord 'make iso'." >&2; exit 1; }
 rm -rf out/test && mkdir -p out/test
 
-docker run --rm --platform linux/amd64 \
+docker run --rm --platform linux/amd64 -e PLUME_TEST_INTERACTIF -e PLUME_TEST_CHIFFRE \
 	-v "$PWD/out":/o -v "$PWD/tests":/tests:ro \
 	alpine:latest sh -c "
 		set -e
@@ -21,7 +21,7 @@ docker run --rm --platform linux/amd64 \
 	"
 
 # Récupère les captures d'écran transmises en base64 par la console série
-for name in greeter bureau terminal logitheque verrou; do
+for name in greeter bureau terminal applications fonds wifi logitheque verrou; do
 	tr -d '\r' < out/test/vm.log | sed -n "/^===B64START $name===\$/,/^===B64END===\$/p" \
 		| sed '1d;$d' | base64 -d > "out/test/$name.png" 2>/dev/null || true
 	[ -s "out/test/$name.png" ] && echo "Capture : out/test/$name.png" || rm -f "out/test/$name.png"

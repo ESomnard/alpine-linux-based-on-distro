@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Bluetooth
+Comment=Casques, souris, claviers et manettes sans fil
+Exec=plume-bluetooth
+Icon=bluetooth
+Terminal=false
+Categories=Settings;
+Keywords=bluetooth;casque;écouteurs;manette;sans fil;

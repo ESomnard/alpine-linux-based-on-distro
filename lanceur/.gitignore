@@ -1,0 +1,4 @@
+/plume-lanceur
+*.o
+*-protocol.c
+*-client-protocol.h

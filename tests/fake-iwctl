@@ -1,0 +1,55 @@
+#!/bin/sh
+# Faux iwctl pour les tests : imite les sorties d'iwd (avec couleurs ANSI).
+# État dans /tmp/wifi-etat (cur=, pow=), appels notés dans /tmp/iwctl.log.
+E=$(printf '\033')
+ST=/tmp/wifi-etat
+[ -f $ST ] || printf 'cur=""\npow=on\n' > $ST
+. $ST
+echo "$*" >> /tmp/iwctl.log
+save() { printf 'cur="%s"\npow=%s\n' "$cur" "$pow" > $ST; }
+sep() { echo "${E}[1;90m--------------------------------------------------------------------------------${E}[0m"; }
+PASS=""
+while [ "${1#--}" != "$1" ]; do
+	case $1 in --passphrase) PASS=$2; shift 2 ;; *) shift ;; esac
+done
+case "$*" in
+"device list")
+	echo "                                    Devices"; sep
+	echo "  Name                  Address               Powered     Adapter     Mode      "; sep
+	echo "  wlan0                 52:54:00:12:34:56     $pow          phy0        station   " ;;
+"station wlan0 show")
+	echo "                                 Station: wlan0"; sep
+	echo "  Settable  Property              Value"; sep
+	echo "            Scanning              no"
+	if [ -n "$cur" ]; then
+		echo "            State                 connected"
+		echo "            Connected network     $cur"
+		echo "            IPv4 address          192.168.1.42"
+	else
+		echo "            State                 disconnected"
+	fi ;;
+"known-networks list")
+	echo "                                Known Networks"; sep
+	echo "  Name                              Security     Hidden   Last connected"; sep
+	echo "  Bureau                            psk                   Nov 15,  9:12 AM" ;;
+"station wlan0 get-networks rssi-dbms")
+	echo "                               Available networks"; sep
+	echo "      Network name                      Security            Signal"; sep
+	for n in "Maison Fibre|psk|-48" "Bureau|psk|-62" "Café Libre|open|-71" "Voisin 5G|psk|-83"; do
+		nm=${n%%|*}; r=${n#*|}; sec=${r%%|*}; sig=${r#*|}
+		m="    "; [ "$nm" = "$cur" ] && m="${E}[0m  > "
+		printf '%s  %-34s%-20s%s\n' "$m" "$nm" "$sec" "$sig"
+	done ;;
+"station wlan0 scan") ;;
+"station wlan0 connect "*)
+	args="$*"; ssid=${args#station wlan0 connect }
+	case "$ssid" in
+	"Maison Fibre") [ "$PASS" = secret123 ] || { echo "Operation failed"; exit 1; } ;;
+	"Voisin 5G") [ -n "$PASS" ] || { echo "Passphrase not provided"; exit 1; } ;;
+	esac
+	cur=$ssid; save ;;
+"station wlan0 disconnect") cur=""; save ;;
+"device wlan0 set-property Powered "*) args="$*"; pow=${args##* }; [ "$pow" = off ] && cur=""; save ;;
+"known-networks "*" forget") ;;
+*) echo "Invalid command"; exit 1 ;;
+esac

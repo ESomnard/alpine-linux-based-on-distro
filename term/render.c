@@ -1,5 +1,6 @@
 /* plume-term — dessin : cadre HUD, barre d'onglets, grille de caractères. */
 #include "term.h"
+#include "theme.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -7,12 +8,9 @@
 #include <time.h>
 
 #define C_BG      0x02060b
-#define C_LINE    0x4fb8e0
-#define C_LINEDIM 0x1d5a78
 #define C_TEXT    0xcdeefc
 #define C_MUTED   0x5f8ea5
 #define C_BRIGHT  0xe9f9ff
-#define C_CORNER  0x9fe4ff
 #define C_WARN    0xe6c86e
 #define C_ERR     0xff5470
 #define FONT      "JetBrains Mono, DejaVu Sans Mono, WenQuanYi Zen Hei"
@@ -239,9 +237,9 @@ static void tabbar(cairo_t *cr, struct rect ta)
 	}
 	/* filet sous la barre */
 	cairo_pattern_t *g = cairo_pattern_create_linear(ta.x + FRAME, 0, ta.x + ta.w - FRAME, 0);
-	cairo_pattern_add_color_stop_rgba(g, 0, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
-	cairo_pattern_add_color_stop_rgba(g, 0.5, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.45);
-	cairo_pattern_add_color_stop_rgba(g, 1, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0, ACC_RGB, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0.5, ACC_RGB, 0.45);
+	cairo_pattern_add_color_stop_rgba(g, 1, ACC_RGB, 0.0);
 	cairo_set_source(cr, g);
 	cairo_rectangle(cr, ta.x + FRAME + 10, y0 + th + 2, ta.w - 2 * FRAME - 20, 1);
 	cairo_fill(cr);

@@ -344,7 +344,11 @@ static void click_bar(struct output *o, uint32_t button)
 	if (in_rect(o->hit_power, x, y))
 		spawn(power_cmd());
 	else if (in_rect(o->hit_vol, x, y))
-		spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+		/* clic : panneau son ; clic du milieu : muet (la molette règle le volume) */
+		spawn(button == BTN_MIDDLE ? "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+					   : "command -v plume-son >/dev/null && exec plume-son || exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
+	else if (in_rect(o->hit_bt, x, y))
+		spawn("command -v plume-bluetooth >/dev/null && exec plume-bluetooth || exec plume-terminal -a plume-btctl -T Bluetooth bluetoothctl");
 	else if (in_rect(o->hit_net, x, y))
 		/* wifi : panneau plume-wifi, sinon iwctl dans le terminal */
 		spawn("command -v plume-wifi >/dev/null && exec plume-wifi || exec plume-terminal -a plume-iwctl -T 'Wifi — iwctl' iwctl");
@@ -352,7 +356,6 @@ static void click_bar(struct output *o, uint32_t button)
 		spawn("PLUME_MAJ_FENETRE=1 exec plume-terminal -a plume-maj -T 'Mises à jour' plume-maj");
 	else if (in_rect(o->hit_kb, x, y))
 		ipc_command("input type:keyboard xkb_switch_layout next");
-	(void)button;
 }
 
 static void click_dock(struct output *o, uint32_t button)

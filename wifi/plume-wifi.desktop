@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Wifi
+Comment=Se connecter à un réseau wifi
+Exec=plume-wifi
+Icon=network-wireless
+Terminal=false
+Categories=Settings;Network;
+Keywords=wifi;réseau;internet;sans fil;

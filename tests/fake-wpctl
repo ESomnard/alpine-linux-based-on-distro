@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Faux wpctl pour les tests : imite « wpctl status / get-volume / set-* » de PipeWire."""
+import json, os, sys
+ST = "/tmp/son-etat.json"
+st = json.load(open(ST)) if os.path.exists(ST) else {
+    "nodes": [
+        {"id": 43, "k": "sink", "n": "Haut-parleurs intégrés", "v": 0.40, "m": False},
+        {"id": 48, "k": "sink", "n": "Casque USB", "v": 0.75, "m": False},
+        {"id": 53, "k": "source", "n": "Micro interne", "v": 1.00, "m": False},
+        {"id": 60, "k": "stream", "n": "Firefox", "v": 0.90, "m": False},
+    ], "def": {"sink": 43, "source": 53}}
+open("/tmp/wpctl.log", "a").write(" ".join(sys.argv[1:]) + "\n")
+a = sys.argv[1:]
+node = lambda i: next(n for n in st["nodes"] if n["id"] == int(i))
+print("E 16:21:20.821 mod.rt Failed to connect to system bus", file=sys.stderr)  # comme le vrai
+if a[0] == "status":
+    print("PipeWire 'pipewire-0' [1.6.8]\n └─ Clients:\n        32. WirePlumber\n\nAudio\n ├─ Devices:\n │      42. Built-in Audio   [alsa]\n │  ")
+    for sect, k in (("Sinks", "sink"), ("Sources", "source")):
+        print(f" ├─ {sect}:")
+        for n in st["nodes"]:
+            if n["k"] == k:
+                star = "*" if st["def"][k] == n["id"] else " "
+                print(f" │  {star}   {n['id']}. {n['n']:<32} [vol: {n['v']:.2f}{' MUTED' if n['m'] else ''}]")
+        print(" │  ")
+    print(" ├─ Filters:\n │  \n └─ Streams:")
+    for n in st["nodes"]:
+        if n["k"] == "stream":
+            print(f"        {n['id']}. {n['n']}")
+            print(f"             {n['id']+1}. output_FL       > Haut-parleurs:playback_FL\t[active]")
+    print("\nVideo\n ├─ Devices:\n │  \n\nSettings\n └─ Default Configured Devices:")
+elif a[0] == "get-volume":
+    n = node(a[1]); print(f"Volume: {n['v']:.2f}{' [MUTED]' if n['m'] else ''}")
+elif a[0] == "set-volume":
+    node(a[1])["v"] = max(0.0, min(1.0, float(a[2])))
+elif a[0] == "set-mute":
+    n = node(a[1]); n["m"] = (not n["m"]) if a[2] == "toggle" else a[2] == "1"
+elif a[0] == "set-default":
+    n = node(a[1]); st["def"][n["k"]] = n["id"]
+else:
+    sys.exit(1)
+json.dump(st, open(ST, "w"))

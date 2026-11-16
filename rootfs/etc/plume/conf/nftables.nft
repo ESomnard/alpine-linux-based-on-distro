@@ -1,0 +1,44 @@
+#!/usr/sbin/nft -f
+# Plume — pare-feu (nftables), chargé au démarrage par le service « nftables ».
+# Rien n'entre de l'extérieur, sauf les réponses à ce que tu as demandé (pages
+# web, mises à jour…) et le strict nécessaire au réseau (ICMP, IPv6).
+# Tout ce qui sort est permis.
+# Ouvrir un port : sudo plume-parefeu ouvrir 22   (ports gardés dans
+# /etc/nftables.d/plume-ports.nft) — état : plume-parefeu
+
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority 0; policy drop;
+
+		iifname lo accept comment "la machine elle-même"
+		ct state { established, related } accept comment "réponses à nos connexions"
+		ct state invalid drop
+
+		# réponse immédiate (au lieu d'attendre) pour AUTH, comme Alpine
+		tcp dport 113 reject with icmpx type port-unreachable
+
+		ip protocol icmp icmp type { echo-reply, destination-unreachable, echo-request, time-exceeded, parameter-problem } \
+			limit rate 20/second accept comment "ping et erreurs réseau"
+		icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply } \
+			limit rate 20/second accept comment "IPv6 de base"
+		icmpv6 type { nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } \
+			ip6 hoplimit 255 accept comment "IPv6 : découverte des voisins (SLAAC)"
+		icmpv6 type { mld-listener-query, mld-listener-report, mld-listener-reduction, mld2-listener-report } \
+			ip6 saddr fe80::/10 accept
+		ip6 saddr fe80::/10 udp sport 547 udp dport 546 accept comment "DHCPv6"
+	}
+
+	# poste de travail : il ne route rien (ip_forward=0) ; « accept » laisse
+	# fonctionner Docker / machines virtuelles s'ils activent le routage
+	chain forward {
+		type filter hook forward priority 0; policy accept;
+	}
+
+	chain output {
+		type filter hook output priority 0; policy accept;
+	}
+}
+
+include "/etc/nftables.d/*.nft"
