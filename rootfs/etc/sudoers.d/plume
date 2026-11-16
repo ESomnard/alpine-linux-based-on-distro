@@ -1,0 +1,9 @@
+# Plume — sudo pour les administrateurs (groupe wheel, créé à l'installation)
+%wheel ALL=(ALL:ALL) ALL
+# Éteindre, redémarrer, mettre en veille : sans mot de passe
+%wheel ALL=(root) NOPASSWD: /sbin/poweroff, /sbin/reboot, /usr/sbin/zzz
+# Astérisques en tapant le mot de passe, pas de sermon à la première utilisation
+Defaults pwfeedback
+Defaults lecture=never
+# /etc/plume/bin : apt, apt-get, apt-cache (traduits vers apk)
+Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/etc/plume/bin"

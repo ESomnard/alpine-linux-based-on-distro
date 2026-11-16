@@ -1,0 +1,4 @@
+/plume-logitheque
+*.o
+*-protocol.c
+*-client-protocol.h

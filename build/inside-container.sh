@@ -39,6 +39,9 @@ mkdir -p "$BUILD_HOME/rootfs/etc/plume/shell"
 cp /work/shell/*.c /work/shell/*.h /work/shell/Makefile "$BUILD_HOME/rootfs/etc/plume/shell/"
 mkdir -p "$BUILD_HOME/rootfs/etc/plume/term"
 cp /work/term/*.c /work/term/*.h /work/term/Makefile "$BUILD_HOME/rootfs/etc/plume/term/"
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/logitheque"
+cp /work/logitheque/*.c /work/logitheque/*.h /work/logitheque/Makefile /work/logitheque/catalogue.txt \
+	/work/logitheque/plume-logitheque.desktop "$BUILD_HOME/rootfs/etc/plume/logitheque/"
 mkdir -p "$BUILD_HOME/out"
 chown -R "$BUILD_USER:abuild" "$BUILD_HOME"
 

@@ -2,7 +2,10 @@
 # Plume — ne garde QUE les firmwares utilisés par ton matériel (gain : plusieurs centaines de Mo).
 # À lancer sur la machine finale, quand tout fonctionne (wifi, écran, bluetooth branchés/actifs).
 set -eu
-[ "$(id -u)" -eq 0 ] || exec doas sh "$0" "$@"
+if [ "$(id -u)" -ne 0 ]; then
+	command -v sudo >/dev/null && exec sudo sh "$0" "$@"
+	exec doas sh "$0" "$@"
+fi
 
 FW=/lib/firmware
 needed=$(mktemp)

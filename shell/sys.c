@@ -164,10 +164,11 @@ static const char *DEFAULT_DOCK =
 	"▶ | Vidéo et musique | mpv --player-operation-mode=pseudo-gui | mpv\n"
 	"◧ | PDF | zathura | org.pwmt.zathura\n"
 	"◈ | Poste de pilotage | plume-term --hud -a plume-pilotage | plume-pilotage\n"
+	"▦ | Logithèque | plume-logitheque | plume-logitheque\n"
 	"---\n"
 	"@power | Éteindre / redémarrer | swaynag -t warning -m 'Que faire ?' "
-	"-B 'Éteindre' 'doas /sbin/poweroff' -B 'Redémarrer' 'doas /sbin/reboot' "
-	"-B 'Veille' 'doas /usr/sbin/zzz' -B 'Déconnexion' 'swaymsg exit' |\n";
+	"-B 'Éteindre' 'sudo -n /sbin/poweroff' -B 'Redémarrer' 'sudo -n /sbin/reboot' "
+	"-B 'Veille' 'sudo -n /usr/sbin/zzz' -B 'Déconnexion' 'swaymsg exit' |\n";
 
 static char *trim(char *s)
 {

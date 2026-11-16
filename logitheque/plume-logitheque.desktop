@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Logithèque Plume
+GenericName=Installer des applications
+Comment=Installer et désinstaller des applications (Alpine et Flathub)
+Exec=plume-logitheque
+Icon=system-software-install
+Terminal=false
+Categories=System;PackageManager;
+Keywords=apt;apk;flatpak;logiciels;applications;installer;store;

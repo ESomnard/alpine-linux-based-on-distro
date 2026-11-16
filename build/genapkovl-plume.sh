@@ -16,7 +16,8 @@ rc_add() {
 
 mkdir -p "$tmp/etc/apk" "$tmp/etc/network"
 echo "$HOSTNAME" > "$tmp/etc/hostname"
-echo "alpine-base" > "$tmp/etc/apk/world"
+# sudo dans « world » : installé sur le live, puis sur le disque par setup-alpine
+printf 'alpine-base\nsudo\n' > "$tmp/etc/apk/world"
 cat > "$tmp/etc/network/interfaces" <<IFACES
 auto lo
 iface lo inet loopback
@@ -29,6 +30,9 @@ IFACES
 cp -a "$PLUME_ROOTFS/." "$tmp/"
 chmod 0755 "$tmp"/etc/plume/*.sh
 chmod 0600 "$tmp"/etc/doas.d/*.conf
+chmod 0440 "$tmp"/etc/sudoers.d/plume
+chmod 0755 "$tmp"/etc/plume/bin/apt
+chmod 0644 "$tmp"/etc/profile.d/plume.sh
 chmod 0755 "$tmp"/etc/skel/.config/sway/*.sh "$tmp"/etc/plume/conf/plume-greeter "$tmp"/etc/plume/conf/plume-bar \
 	"$tmp"/etc/plume/conf/plume-terminal
 chown -R 0:0 "$tmp"

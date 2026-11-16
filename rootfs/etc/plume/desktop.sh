@@ -1,10 +1,13 @@
 #!/bin/sh
 # Plume — installe l'environnement du quotidien sur un système déjà installé.
-# Usage : doas sh /etc/plume/desktop.sh [--no-apps]
+# Usage : sudo sh /etc/plume/desktop.sh [--no-apps]
 set -eu
 
 PLUME=/etc/plume
-[ "$(id -u)" -eq 0 ] || exec doas sh "$0" "$@"
+if [ "$(id -u)" -ne 0 ]; then
+	command -v sudo >/dev/null && exec sudo sh "$0" "$@"
+	exec doas sh "$0" "$@"
+fi
 
 WITH_APPS=1
 for a; do
@@ -71,7 +74,7 @@ awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: rea
 	echo "  - $u"
 done
 
-log "Compilation de plume-hud (connexion + verrouillage), plume-shell (barre + dock) et plume-term (terminal + poste de pilotage)"
+log "Compilation de plume-hud (connexion + verrouillage), plume-shell (barre + dock), plume-term (terminal + poste de pilotage) et la Logithèque"
 # outils de compilation installés temporairement, puis supprimés juste après
 BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev libvterm-dev"
 HUD_OK=0
@@ -90,6 +93,9 @@ if apk add --virtual .plume-build $BUILD_DEPS; then
 	rm -rf /tmp/plume-term && cp -r "$PLUME/term" /tmp/plume-term
 	make -C /tmp/plume-term && make -C /tmp/plume-term install PREFIX=/usr/local || true
 	rm -rf /tmp/plume-term
+	rm -rf /tmp/plume-logitheque && cp -r "$PLUME/logitheque" /tmp/plume-logitheque
+	make -C /tmp/plume-logitheque && make -C /tmp/plume-logitheque install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-logitheque
 	log "Suppression des outils de compilation"
 	apk del .plume-build
 fi
@@ -109,6 +115,8 @@ fi
 install -Dm755 "$PLUME/conf/plume-bar" /usr/local/bin/plume-bar
 # lanceur de terminal : plume-term, sinon foot
 install -Dm755 "$PLUME/conf/plume-terminal" /usr/local/bin/plume-terminal
+# apt, apt-get, apt-cache (traduits vers apk) partout, même hors connexion texte
+for c in apt apt-get apt-cache; do ln -sf /etc/plume/bin/apt "/usr/local/bin/$c"; done
 
 log "Nettoyage"
 rm -rf /var/cache/apk/*
@@ -131,12 +139,12 @@ awk '
 
 cat <<'END'
 
-Terminé ! Redémarre avec : doas reboot
+Terminé ! Redémarre avec : sudo reboot
 
 Après le redémarrage, l'écran de connexion HUD s'affiche : ton mot de passe → sway.
 (Connexion texte de secours : Ctrl+Alt+F1.)  Verrouiller : Super+Échap.
 Wifi (une seule fois) :  iwctl station wlan0 connect "NomDuReseau"
 
-Pour alléger encore : doas sh /etc/plume/slim-firmware.sh
+Pour alléger encore : sudo sh /etc/plume/slim-firmware.sh
 
 END

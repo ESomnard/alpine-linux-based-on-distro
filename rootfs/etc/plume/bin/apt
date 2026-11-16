@@ -1,0 +1,237 @@
+#!/bin/sh
+# Plume — « apt » pour les habitués d'Ubuntu/Debian.
+# Plume est basée sur Alpine, dont le gestionnaire de paquets est apk :
+# cette commande traduit apt, apt-get et apt-cache vers apk, y compris les
+# noms de paquets Debian les plus courants (build-essential, python3-pip…).
+
+prog=$(basename "$0")
+yes=0
+
+err() { printf 'E: %s\n' "$*" >&2; }
+note() { printf '%s\n' "$*" >&2; }
+
+usage() {
+	cat <<EOF
+$prog (Plume) — traduit les commandes apt vers apk, le gestionnaire d'Alpine.
+
+  sudo $prog update                 mettre à jour la liste des paquets
+  sudo $prog upgrade                mettre à jour le système
+  sudo $prog install PAQUET…        installer
+  sudo $prog remove PAQUET…         désinstaller (aussi : purge)
+  sudo $prog reinstall PAQUET…      réinstaller / réparer
+       $prog search MOT             chercher un paquet
+       $prog show PAQUET            décrire un paquet
+       $prog list --installed       paquets installés (aussi : --upgradable)
+       $prog policy PAQUET          version installée et disponible
+
+Les noms Debian courants sont traduits (build-essential → build-base,
+python3-pip → py3-pip…). Les fichiers .deb ne s'installent pas sur Plume :
+cherche le paquet avec « $prog search », sinon passe par Flatpak.
+EOF
+}
+
+need_root() {
+	if [ "$(id -u)" -ne 0 ]; then
+		err "il faut les droits administrateur. Essaie : sudo $prog $ORIG_ARGS"
+		exit 100
+	fi
+}
+
+# existe-t-il un paquet de ce nom exact dans les dépôts ?
+exists() { [ -n "$(apk search -e -q "$1" 2>/dev/null)" ]; }
+
+# nom Debian -> nom Alpine
+translate() {
+	case "$1" in
+	build-essential) echo build-base ;;
+	software-properties-common|apt-transport-https|ca-certificates-java) echo "" ;;
+	python3-venv|python3-distutils) echo python3 ;;
+	python3-tk) echo python3-tkinter ;;
+	python-is-python3) echo python3 ;;
+	pkg-config) echo pkgconf ;;
+	openssh-server) echo openssh ;;
+	dnsutils) echo bind-tools ;;
+	iputils-ping) echo iputils ;;
+	netcat|netcat-openbsd|netcat-traditional) echo netcat-openbsd ;;
+	default-jdk|openjdk-*-jdk) echo openjdk21 ;;
+	default-jre|openjdk-*-jre) echo openjdk21-jre ;;
+	docker.io) echo docker ;;
+	docker-compose-plugin) echo docker-cli-compose ;;
+	ninja-build) echo ninja ;;
+	fd-find) echo fd ;;
+	p7zip-full|p7zip) echo 7zip ;;
+	xz-utils) echo xz ;;
+	libssl-dev) echo openssl-dev ;;
+	zlib1g-dev) echo zlib-dev ;;
+	libsqlite3-dev) echo sqlite-dev ;;
+	libcurl4-openssl-dev|libcurl4-gnutls-dev) echo curl-dev ;;
+	libncurses-dev|libncurses5-dev|libncursesw5-dev) echo ncurses-dev ;;
+	libreadline-dev) echo readline-dev ;;
+	libbz2-dev) echo bzip2-dev ;;
+	liblzma-dev) echo xz-dev ;;
+	libgtk-3-dev) echo gtk+3.0-dev ;;
+	libsdl2-dev) echo sdl2-dev ;;
+	*) echo "$1" ;;
+	esac
+}
+
+# résout un nom Debian en paquet Alpine existant (vide si introuvable)
+resolve() {
+	t=$(translate "$1")
+	[ -z "$t" ] && return 0
+	if exists "$t"; then echo "$t"; return 0; fi
+	case "$1" in
+	python3-*) c="py3-${1#python3-}"; exists "$c" && { echo "$c"; return 0; } ;;
+	lib*-dev) c="${1#lib}"; exists "$c" && { echo "$c"; return 0; } ;;
+	esac
+	return 1
+}
+
+# options apt sans équivalent (apk ne pose pas de question : -y est inutile)
+ORIG_ARGS="$*"
+for a do
+	shift
+	case "$a" in
+	-y | --yes | --assume-yes | -q | -qq | --quiet | --no-install-recommends | --install-recommends | \
+	-f | --fix-broken | --allow-unauthenticated) continue ;;
+	esac
+	set -- "$@" "$a"
+done
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+
+# apt-cache : seulement les commandes de lecture
+if [ "$prog" = apt-cache ]; then
+	case "$cmd" in search|show|policy|depends|rdepends|showpkg) ;; *) usage; exit 100 ;; esac
+fi
+
+case "$cmd" in
+update)
+	need_root
+	exec apk update
+	;;
+upgrade|full-upgrade|dist-upgrade)
+	need_root
+	exec apk upgrade -U
+	;;
+install)
+	need_root
+	[ $# -gt 0 ] || { err "indique au moins un paquet : sudo $prog install NOM"; exit 100; }
+	# liste des paquets à jour si elle n'a jamais été téléchargée
+	exists busybox || apk update >/dev/null 2>&1 || true
+	pkgs=""
+	for p in "$@"; do
+		case "$p" in
+		*.deb)
+			err "« $p » est un paquet Debian : il ne s'installe pas sur Plume (Alpine)."
+			note "   Cherche l'équivalent : $prog search NOM, ou une version Flatpak."
+			exit 100 ;;
+		esac
+		if r=$(resolve "$p"); then
+			if [ -z "$r" ]; then
+				note "• $p : inutile sur Plume, ignoré"
+			else
+				[ "$r" != "$p" ] && note "• $p → $r (nom Alpine)"
+				pkgs="$pkgs $r"
+			fi
+		else
+			err "paquet introuvable : $p"
+			note "   Essaie : $prog search $p"
+			exit 100
+		fi
+	done
+	[ -n "$pkgs" ] || exit 0
+	exec apk add $pkgs
+	;;
+reinstall)
+	need_root
+	exec apk fix "$@"
+	;;
+remove|purge|autopurge)
+	need_root
+	[ $# -gt 0 ] || { err "indique au moins un paquet"; exit 100; }
+	pkgs=""
+	for p in "$@"; do
+		r=$(translate "$p")
+		[ -n "$r" ] && pkgs="$pkgs $r"
+	done
+	exec apk del $pkgs
+	;;
+autoremove|autoclean)
+	note "Rien à faire : sur Plume, apk retire tout seul les dépendances devenues inutiles."
+	;;
+clean)
+	need_root
+	rm -rf /var/cache/apk/* && note "Cache des paquets vidé."
+	;;
+search)
+	[ $# -gt 0 ] || { err "indique un mot à chercher"; exit 100; }
+	# tous les mots doivent figurer dans le nom ou la description ;
+	# ordre : nom exact, nom qui commence par le mot, nom qui le contient, description
+	apk search -v 2>/dev/null | awk -v q="$*" '
+	BEGIN { nq = split(tolower(q), w, " ") }
+	{
+		i = index($0, " - "); if (!i) next
+		nv = substr($0, 1, i - 1); desc = substr($0, i + 3)
+		n = nv; v = ""
+		if (match(nv, /-[0-9][^-]*-r[0-9]+$/)) { n = substr(nv, 1, RSTART - 1); v = substr(nv, RSTART + 1) }
+		ln = tolower(n); ld = tolower(desc)
+		for (k = 1; k <= nq; k++) if (!index(ln, w[k]) && !index(ld, w[k])) next
+		r = ln == w[1] ? 0 : index(ln, w[1]) == 1 ? 1 : index(ln, w[1]) ? 2 : 3
+		printf "%d\t%s\t%s\t%s\n", r, n, v, desc
+	}' | sort -t "$(printf '\t')" -k1,1n -k2,2 | awk -F '\t' '{ printf "%s (%s)\n    %s\n", $2, $3, $4 }'
+	;;
+show|showpkg)
+	[ $# -gt 0 ] || { err "indique un paquet"; exit 100; }
+	for p in "$@"; do
+		r=$(resolve "$p") || { err "paquet introuvable : $p"; continue; }
+		inst=non
+		apk info -e "$r" >/dev/null 2>&1 && inst=oui
+		apk info -a "$r" 2>/dev/null | awk -v inst="$inst" '
+		/^[^ ].* [a-z ]+:$/ {
+			field = $0; sub(/:$/, "", field)
+			if (!pkg) { pkg = $1; v = pkg; n = pkg; if (match(pkg, /-[0-9][^-]*-r[0-9]+$/)) { n = substr(pkg, 1, RSTART - 1); v = substr(pkg, RSTART + 1) }
+				printf "Paquet : %s\nVersion : %s\nInstallé : %s\n", n, v, inst }
+			sub(/^[^ ]+ /, "", field); next
+		}
+		/^$/ { field = ""; next }
+		field == "description" { print "Description : " $0 }
+		field == "webpage" { print "Site : " $0 }
+		field == "installed size" { print "Taille : " $0 }
+		field == "license" { print "Licence : " $0 }
+		field == "depends on" { dep = dep (dep ? ", " : "") $0 }
+		END { if (dep) print "Dépend de : " dep }'
+		echo
+	done
+	;;
+depends)
+	exec apk info -R "$@"
+	;;
+rdepends)
+	exec apk info -r "$@"
+	;;
+policy)
+	exec apk policy "$@"
+	;;
+list)
+	case "${1:-}" in
+	--installed) apk info -v 2>/dev/null | sort ;;
+	--upgradable|--upgradeable) apk version -l '<' 2>/dev/null | tail -n +2 ;;
+	"") apk search -v 2>/dev/null | sort ;;
+	*) apk search -v "$1" 2>/dev/null | sort ;;
+	esac
+	;;
+help|-h|--help)
+	usage
+	;;
+edit-sources)
+	need_root
+	exec ${EDITOR:-vi} /etc/apk/repositories
+	;;
+*)
+	err "commande inconnue : $cmd"
+	usage
+	exit 100
+	;;
+esac

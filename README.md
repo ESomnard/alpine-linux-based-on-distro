@@ -37,7 +37,7 @@ Avoir un ordinateur **rapide, sobre et simple**, même sur une vieille machine :
 |---|---|---|
 | Base Alpine (`alpine-base`, le socle de minirootfs) | 27 | ~14 Mo |
 | + noyau `linux-lts` (sans firmwares) | 47 | ~220 Mo |
-| + socle système (doas, dbus, iwd, zram…) | 75 | ~230 Mo |
+| + socle système (sudo, dbus, iwd, zram…) | 75 | ~230 Mo |
 | + bureau, son, claviers et pinyin | 264 | ~700 Mo |
 | + applications (Firefox, mpv, PDF…) | 377 | **~1,15 Go** |
 | + firmwares de **ta** machine (détectés à l'installation) | | + quelques dizaines de Mo |
@@ -58,7 +58,7 @@ Mesuré dans le test automatique, une fois tout installé : **1,1 Go sur le disq
 | Base | **Alpine Linux 3.24** (musl + BusyBox) | Debian, Ubuntu… | La base la plus petite qui reste une vraie distro |
 | Démarrage des services | **OpenRC** | systemd | Simple, rapide, peu de RAM |
 | Noyau | **linux-lts** 6.18 | linux-virt | `virt` n'a pas les pilotes wifi, GPU, son ni touchpad |
-| Admin | **doas** | sudo | Quelques centaines de lignes de code |
+| Admin | **sudo** (+ doas, gardé pour Alpine) | — | Les commandes d'Ubuntu marchent : `sudo …`, `sudo apt install …` (traduit vers apk) |
 | Sessions graphiques | **seatd** | elogind / logind | Minuscule, suffisant pour Wayland |
 | Wifi | **iwd** | NetworkManager | Un seul démon, qui gère aussi le DHCP |
 | Swap | **zram** (compressé en RAM) | partition swap | Aucun espace disque perdu |
@@ -88,6 +88,7 @@ traits cyan lumineux `#4fb8e0`, équerres dans les coins, police **JetBrains Mon
 | Barre du haut + dock | **plume-shell** (maison, ~80 Ko) : bureaux, fenêtre active, CPU en graphe, RAM, réseau, son, batterie, heure ; dock avec applis ouvertes et info-bulles |
 | Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME |
 | Poste de pilotage | **plume-term --hud** : le terminal en plein écran, entouré des performances (CPU, cœurs, RAM, swap, réseau, disques, processus), d'un explorateur de fichiers avec recherche et d'un clavier à l'écran — `Super + x` ou `◈` dans le dock |
+| Logithèque | **plume-logitheque** (maison, ~120 Ko) : installer et désinstaller des applications comme GNOME Logiciels — catalogue en français par catégories, recherche dans tous les paquets Alpine et Flathub, mises à jour ; `▦` dans le dock ou « Logithèque » dans le lanceur |
 | Terminal | **plume-term** (maison, ~150 Ko + libvterm ~100 Ko) : terminal HUD avec onglets, historique, copier/coller, couleurs complètes, et mode poste de pilotage — **foot** reste installé en secours (`Super + Maj + Entrée`) |
 | Lanceur d'applications | **fuzzel** |
 | Notifications | **mako** |
@@ -135,8 +136,10 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | `plume-hud` intégré : compilé puis outils supprimés, greetd au démarrage, verrouillage depuis sway | ✅ Testé en VM |
 | Thème du bureau (sway, foot, fuzzel, mako, GTK, fond d'écran) | ✅ Testé dans un sway virtuel (`tests/desktop-preview.sh`) |
 | `plume-shell` (barre + dock) | ✅ Testé en VM (barre, dock, son, applis ouvertes) — bureau complet : ~150 Mo de RAM |
+| `sudo` et `apt` (comme sur Ubuntu) | ✅ Testé en VM (sudo présent dès l'installation, `sudo apt update / install / remove`, `apt show / search`, refus sans `sudo`) et dans un Alpine 3.24 vierge (`apt-get`, `apt-cache`, `list`, `policy`, traduction des noms Debian, refus des `.deb`) |
+| Logithèque Plume | 🟡 Testé dans un sway virtuel (`tests/logitheque-preview.sh`) : catalogue, recherche Alpine + Flathub, mauvais puis bon mot de passe, installation et suppression d'un paquet Alpine, protection des paquets vitaux, mises à jour, activation de Flathub — installation d'une appli Flathub pas encore testée (plusieurs centaines de Mo) ; test VM en cours |
 | `plume-term` (terminal) | ✅ Testé en VM (compilé sur la machine, lancé depuis sway) et dans un sway virtuel (`tests/term-preview.sh`) : couleurs 16/256/24 bits, styles, accents et touches mortes, chinois, cadres, htop, historique, onglets, copier/coller, sélection à la souris, zoom |
-| `plume-term --hud` (poste de pilotage) | ✅ Testé en VM (mesures réelles de la machine) et dans un sway virtuel avec souris et clavier virtuels : raccourcis, recherche, ouverture de fichier, « cd ici », fil d'Ariane, fichiers cachés, clavier à l'écran ; ~35 Mo de RAM, ~1 à 2 % d'un cœur au repos |
+| `plume-term --hud` (poste de pilotage) | ✅ Testé en VM (mesures réelles de la machine) et dans un sway virtuel avec souris et clavier virtuels : raccourcis, recherche, ouverture de fichier, « cd ici », fil d'Ariane, fichiers cachés, clavier à l'écran ; touches qui s'allument vérifiées à la main avec un vrai clavier (Mac, via VNC) ; ~35 Mo de RAM, ~1 à 2 % d'un cœur au repos |
 | Wifi, veille, luminosité, touches multimédia | ⚪ Codé, à tester sur un vrai PC |
 | Démarrage UEFI | ⚪ À tester |
 | Chiffrement du disque | ⚪ À faire |
@@ -152,7 +155,7 @@ make vm       # ouvre la distro installée dans une VM graphique (VNC)
 ```
 
 Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /etc/plume/install.sh`
-→ redémarre → `doas sh /etc/plume/desktop.sh` → redémarre. C'est tout.
+→ redémarre → `sudo sh /etc/plume/desktop.sh` → redémarre. C'est tout.
 
 ---
 
@@ -194,6 +197,9 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   └── main.c draw.c ipc.c json.c sys.c shell.h Makefile
 ├── term/                         # plume-term : terminal HUD + poste de pilotage (Wayland + libvterm)
 │   └── main.c tab.c render.c hud.c sysinfo.c term.h hud.h Makefile
+├── logitheque/                   # Logithèque Plume : installer des applications (Alpine + Flathub)
+│   ├── main.c ui.c backend.c proc.c logitheque.h Makefile
+│   └── catalogue.txt             # applications mises en avant (catégorie, sources, résumé en français)
 ├── tests/
 │   ├── vm-test.sh                # test automatique complet (QEMU dans Docker)
 │   ├── vm-test.py                # pilote la VM par la console série (pexpect)
@@ -201,12 +207,15 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   ├── hud-preview.sh            # teste plume-hud dans un sway virtuel (captures)
 │   ├── term-preview.sh           # teste plume-term dans un sway virtuel (captures, mémoire, clics)
 │   ├── vpointer.c                # souris virtuelle pour les tests de clics
+│   ├── logitheque-preview.sh     # teste la Logithèque (mot de passe, installation, Flathub)
 │   ├── desktop-preview.sh        # aperçu du bureau (thème, barre, dock, lanceur)
 │   └── fake-greetd.py            # faux greetd pour tester l'écran de connexion
 └── rootfs/                       # fichiers copiés tels quels dans le système
     └── etc/
         ├── motd                  # message d'accueil
-        ├── doas.d/plume.conf     # veille / extinction / redémarrage sans mot de passe
+        ├── sudoers.d/plume       # sudo pour les admins ; veille / extinction sans mot de passe
+        ├── doas.d/plume.conf     # idem pour doas
+        ├── profile.d/plume.sh    # ajoute /etc/plume/bin (apt) au PATH
         ├── plume/
         │   ├── install.sh        # installation sur disque (surcouche de setup-alpine)
         │   ├── desktop.sh        # installe le bureau et les applications
@@ -291,7 +300,7 @@ Résultats : `out/test/vm.log` (console complète) et `out/test/screenshot.png`.
 Compte environ 1 h : la VM est **émulée**, faute de virtualisation matérielle dans Docker sur macOS.
 
 > Uniquement pour ce test, le disque virtuel reçoit `console=ttyS0` (pour la console série)
-> et une règle `doas` sans mot de passe pour l'utilisateur `test`. L'ISO n'est pas modifiée.
+> et des règles `sudo` / `doas` sans mot de passe pour l'utilisateur `test`. L'ISO n'est pas modifiée.
 
 ### Essayer la distro toi-même (VM graphique)
 
@@ -347,7 +356,7 @@ Ou plus simplement avec **balenaEtcher** ou **Ventoy**.
 5. `setup-alpine` démarre avec les réglages légers déjà remplis : pas de SSH, ntpd de BusyBox, pas de partition swap, dépôt `community` activé. Il te demande ensuite :
    - **le réseau** : `eth0` (câble) ou `wlan0` (wifi : il scanne et demande le mot de passe), puis `dhcp` ;
    - **le mot de passe root** ;
-   - **ton utilisateur** (`Setup a user?`) : ton login en minuscules, puis son mot de passe. Il sera admin via `doas` ;
+   - **ton utilisateur** (`Setup a user?`) : ton login en minuscules, puis son mot de passe. Il sera admin via `sudo` ;
    - **le disque** : par ex. `sda` ou `nvme0n1`. ⚠️ **Il sera entièrement effacé.**
 6. À la fin : retire la clé et tape `reboot`.
 
@@ -358,9 +367,9 @@ Ou plus simplement avec **balenaEtcher** ou **Ventoy**.
 Après le redémarrage, connecte-toi avec **ton utilisateur**, puis :
 
 ```sh
-doas sh /etc/plume/desktop.sh            # tout
-doas sh /etc/plume/desktop.sh --no-apps  # sans Firefox, mpv… (plus léger)
-doas reboot
+sudo sh /etc/plume/desktop.sh            # tout
+sudo sh /etc/plume/desktop.sh --no-apps  # sans Firefox, mpv… (plus léger)
+sudo reboot
 ```
 
 Le script :
@@ -370,7 +379,7 @@ Le script :
 4. active les services `dbus`, `seatd`, `zram-init` et `iwd` ;
 5. règle le swap **zram** à la moitié de la RAM ;
 6. ajoute ton utilisateur aux groupes nécessaires (`seat`, `video`, `audio`, `input`…) et copie la config par défaut sans écraser l'existant ;
-7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock), **`plume-term`** (terminal + poste de pilotage) et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
+7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock), **`plume-term`** (terminal + poste de pilotage), la **Logithèque** et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
    crée aussi les dossiers Bureau, Documents, Téléchargements, Images, Musique, Vidéos ;
 8. active **greetd**, qui affiche le HUD de connexion au démarrage ;
 9. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
@@ -397,11 +406,11 @@ alors qu'un PC en utilise quelques-uns.
 matériel détecté et n'installe que les firmwares nécessaires.
 
 `slim-firmware.sh` sert de **filet de sécurité**, par exemple si tu as installé tous les
-firmwares (`apk add linux-firmware`) pour faire marcher un composant. Lance-le quand
+firmwares (`sudo apt install linux-firmware`) pour faire marcher un composant. Lance-le quand
 **tout fonctionne** (wifi connecté, écran OK, bluetooth activé si tu t'en sers) :
 
 ```sh
-doas sh /etc/plume/slim-firmware.sh
+sudo sh /etc/plume/slim-firmware.sh
 ```
 
 Le script :
@@ -412,16 +421,16 @@ Le script :
 4. **propose** de supprimer tous les autres paquets `linux-firmware-*`, ainsi que le microcode du mauvais fabricant de CPU. Il demande confirmation.
 
 > ⚠️ Un composant éteint pendant l'installation (wifi désactivé, dock débranché…) n'aura pas
-> son firmware. Dans ce cas, ou si tu changes de matériel : `doas apk add linux-firmware`,
+> son firmware. Dans ce cas, ou si tu changes de matériel : `sudo apt install linux-firmware`,
 > puis relance le script.
 
 ### Encore plus léger
 
-- Retirer des applications : `doas apk del pcmanfm micro …`
+- Retirer des applications : `sudo apt remove pcmanfm micro …`
 - Pas besoin du chinois : retirer les lignes `ibus …` et `font-wqy-zenhei` de `desktop.list` (−115 Mo).
 - Ne pas installer `xwayland` tant qu'aucune appli ne l'exige.
-- Supprimer la documentation : `doas apk del $(apk info | grep -- '-doc$')`.
-- Vider le cache : `doas rm -rf /var/cache/apk/*`
+- Supprimer la documentation : `sudo apt remove $(apk info | grep -- '-doc$')`.
+- Vider le cache : `sudo rm -rf /var/cache/apk/*`
 - Démarrage plus rapide : `rc_parallel="YES"` dans `/etc/rc.conf`.
 - Terminal plus léger : `set $term foot` dans `~/.config/sway/config` (foot : ~11 Mo de RAM, plume-term : ~24 Mo avec 2 onglets).
 
@@ -525,25 +534,60 @@ Les touches mortes de l'AZERTY marchent (`^` puis `e` = `ê`).
 3. Choisis les caractères avec `Espace` ou les chiffres : 你好.
 4. `Super + Espace` pour revenir à la saisie normale.
 
+### Logithèque Plume (installer des applications)
+
+`▦` dans le dock, ou « Logithèque » dans le lanceur (`Super + d`). Comme GNOME Logiciels, au style HUD :
+
+| Onglet | Ce qu'on y fait |
+|---|---|
+| **Explorer** | ~70 applications choisies, rangées par catégorie (Internet, Bureautique, Multimédia, Graphisme, Jeux, Développement, Utilitaires, Système), décrites en français ; **tape n'importe où pour chercher** : dans le catalogue, dans les ~28 000 paquets Alpine et dans Flathub |
+| **Installées** | applications installées (Alpine et Flathub), avec **Ouvrir** et **Supprimer** ; les paquets dont Plume a besoin (socle Alpine, bureau) sont protégés |
+| **Mises à jour** | télécharge la liste à jour, montre ce qui peut être mis à jour (système et Flathub), **Tout mettre à jour** |
+
+- **Deux sources** : les paquets **Alpine** (légers, mot de passe administrateur demandé dans la fenêtre, gardé 5 min en mémoire, jamais enregistré) et **Flathub** (Steam, Discord, Spotify…, installés pour toi seul, sans mot de passe). Quand une appli existe des deux côtés, la fiche propose de choisir.
+- **Flathub** s'active d'un clic (`Activer Flathub`) : installe Flatpak (~70 Mo) et ajoute le dépôt. Les applis Flathub apparaissent ensuite dans le lanceur.
+- Le catalogue est un simple fichier texte : `logitheque/catalogue.txt` (installé dans `/usr/local/share/plume/logitheque.txt`).
+
+### sudo et apt (comme sur Ubuntu)
+
+Plume est basée sur Alpine, dont le gestionnaire de paquets s'appelle **apk**. Pour ne pas changer
+d'habitudes (et suivre les tutos d'Internet), Plume fournit **`sudo`** (le vrai) et une commande
+**`apt`** (aussi `apt-get` et `apt-cache`) qui traduit vers apk :
+
+| Tu tapes | Plume fait |
+|---|---|
+| `sudo apt update` | `apk update` |
+| `sudo apt upgrade` (aussi `full-upgrade`, `dist-upgrade`) | `apk upgrade -U` |
+| `sudo apt install nom…` | `apk add nom…`, en traduisant les noms Debian : `build-essential` → `build-base`, `python3-xxx` → `py3-xxx`, `libssl-dev` → `openssl-dev`, `openssh-server` → `openssh`, `default-jdk` → `openjdk21`… |
+| `sudo apt remove nom…` (aussi `purge`) | `apk del nom…` |
+| `apt search mot` | cherche dans les noms puis les descriptions (les meilleurs résultats en premier) |
+| `apt show nom` | fiche du paquet : version, installé ou non, taille, site, licence, dépendances |
+| `apt list --installed` / `--upgradable` | paquets installés / à mettre à jour |
+| `sudo apt autoremove` | rien à faire : apk retire tout seul les dépendances inutiles |
+
+Les options `-y`, `-q`, `--no-install-recommends` sont acceptées (apk ne pose pas de question).
+Un fichier `.deb` ne s'installe pas sur Plume : `apt` le dit et propose de chercher l'équivalent
+(`apt search`) ou une version Flatpak. `apk` et `doas` restent disponibles pour qui les préfère.
+
 ### Commandes utiles
 
 | Je veux… | Commande |
 |---|---|
-| Mettre à jour le système | `doas apk upgrade -U` |
-| Chercher un logiciel | `apk search nom` |
-| Installer / supprimer | `doas apk add nom` / `doas apk del nom` |
+| Mettre à jour le système | `sudo apt update && sudo apt upgrade` (ou l'alias `maj`) |
+| Chercher un logiciel | `apt search nom` |
+| Installer / supprimer | `sudo apt install nom` / `sudo apt remove nom` |
 | Wifi | `iwctl` (interactif) ou `iwctl station wlan0 connect "SSID"` |
 | Volume | `wpctl set-volume @DEFAULT_AUDIO_SINK@ 50%` |
 | Choisir la sortie audio | `wpctl status`, puis `wpctl set-default <id>` |
-| Bluetooth | `doas apk add bluez bluez-openrc && doas rc-update add bluetooth && doas rc-service bluetooth start`, puis `bluetoothctl` |
-| Clé USB | `doas mount /dev/sdb1 /mnt` (ou pcmanfm + `doas apk add udisks2 gvfs`) |
-| Imprimer | `doas apk add cups cups-openrc && doas rc-update add cupsd` |
-| Applis absentes d'Alpine | `doas apk add flatpak` (attention : beaucoup plus lourd) |
-| Services | `rc-status`, `doas rc-service <nom> restart` |
-| Journaux | `doas tail -f /var/log/messages` |
+| Bluetooth | `sudo apt install bluez bluez-openrc && sudo rc-update add bluetooth && sudo rc-service bluetooth start`, puis `bluetoothctl` |
+| Clé USB | `sudo mount /dev/sdb1 /mnt` (ou pcmanfm + `sudo apt install udisks2 gvfs`) |
+| Imprimer | `sudo apt install cups cups-openrc && sudo rc-update add cupsd` |
+| Applis absentes d'Alpine | `sudo apt install flatpak` (attention : beaucoup plus lourd) |
+| Services | `rc-status`, `sudo rc-service <nom> restart` |
+| Journaux | `sudo tail -f /var/log/messages` |
 
 Nouvelle version d'Alpine : remplace `v3.XX` dans `/etc/apk/repositories`, puis
-`doas apk upgrade -U --available` et redémarre.
+`sudo apk upgrade -U --available` et redémarre.
 
 ---
 
@@ -583,17 +627,17 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 | `Login incorrect` pour ton utilisateur | Connecte-toi en `root`, puis `passwd tonlogin` |
 | sway ne démarre pas | Lance `sway` à la main depuis tty1 pour voir l'erreur ; vérifie `groups` (`seat`, `video`, `input`) et `rc-service seatd status` |
 | Écran noir en VM | `WLR_RENDERER=pixman sway` |
-| Clavier ou souris inactifs sous sway | `doas setup-devd udev`, puis redémarre |
+| Clavier ou souris inactifs sous sway | `sudo setup-devd udev`, puis redémarre |
 | Pas de son | `ps \| grep pipewire` ; vérifie `echo $XDG_RUNTIME_DIR` et le groupe `audio` |
-| Écran de connexion noir ou absent | `Ctrl + Alt + F1` pour la connexion texte, puis `doas rc-service greetd restart` ; journal : `doas cat /var/log/messages \| grep -i greet` |
+| Écran de connexion noir ou absent | `Ctrl + Alt + F1` pour la connexion texte, puis `sudo rc-service greetd restart` ; journal : `sudo cat /var/log/messages \| grep -i greet` |
 | Le terminal ne s'ouvre pas | `Super + Maj + Entrée` ouvre foot ; puis `plume-term` dedans pour voir l'erreur |
 | Le verrouillage ne s'affiche pas | `plume-hud --dev` pour tester ; à défaut, sway utilise swaylock automatiquement |
 | Le pinyin ne s'active pas | `ps \| grep ibus-daemon` ; relance avec `ibus-daemon -drx` |
-| Wifi absent | `doas rc-service iwd restart`, puis `iwctl` ; si la carte n'apparaît pas : `doas apk add linux-firmware` |
-| Plus de wifi après `slim-firmware.sh` | Branche un câble, `doas apk add linux-firmware`, redémarre, relance le script avec le wifi **actif** |
+| Wifi absent | `sudo rc-service iwd restart`, puis `iwctl` ; si la carte n'apparaît pas : `sudo apt install linux-firmware` |
+| Plus de wifi après `slim-firmware.sh` | Branche un câble, `sudo apt install linux-firmware`, redémarre, relance le script avec le wifi **actif** |
 | Luminosité bloquée | Vérifie le groupe `video`, puis reconnecte-toi |
-| Une appli X11 ne s'ouvre pas | `doas apk add xwayland` |
-| Programme compilé pour glibc | `doas apk add gcompat`, sinon Flatpak |
+| Une appli X11 ne s'ouvre pas | `sudo apt install xwayland` |
+| Programme compilé pour glibc | `sudo apt install gcompat`, sinon Flatpak |
 | Plus de son après une mise à jour d'Alpine | Alpine prévoit de retirer `/usr/libexec/pipewire-launcher` : adapte la ligne correspondante de la config sway selon le wiki PipeWire d'Alpine |
 
 ---
@@ -606,7 +650,7 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Problème | Détails |
 |---|---|---|
-| 🟠 | **plume-hud : le clavier ne répond plus s'il est débranché puis rebranché pendant l'écran de connexion ou de verrouillage** | **Quand ça arrive :** sur un PC avec un clavier USB (ou sans fil avec dongle), si le clavier est débranché puis rebranché, ou se met en veille puis se reconnecte, alors que l'écran de connexion ou de verrouillage est affiché. Un portable n'est pas concerné tant qu'on utilise son clavier intégré, qui ne disparaît jamais.<br>**Ce qu'on voit :** l'écran reste affiché mais les frappes ne font plus rien : impossible de taper son mot de passe, donc de se connecter ou de déverrouiller. La souris peut avoir le même problème.<br>**Pourquoi :** quand le dernier clavier disparaît, le compositeur (sway ou cage) annonce qu'il n'y a « plus de clavier », puis « de nouveau un clavier » au rebranchement. Une appli Wayland doit alors abandonner l'ancien objet clavier, devenu inerte, et en demander un nouveau. plume-hud garde l'ancien et n'en redemande jamais (`seat_caps` dans `hud/main.c`).<br>**Contournement en attendant (non testé) :** relancer plume-hud, car une nouvelle copie récupère le clavier rebranché. `Ctrl + Alt + F2`, se connecter en mode texte, puis : écran de connexion → `doas rc-service greetd restart` ; écran de verrouillage → `pkill plume-hud && WAYLAND_DISPLAY=wayland-1 plume-hud --lock &`, puis revenir sur l'écran de sway (`Ctrl + Alt + F7` avec greetd, `F1` sinon). Attention : tuer plume-hud sans le relancer laisse la session verrouillée sans rien pour taper le mot de passe (c'est voulu, pour la sécurité). En dernier recours : redémarrer (le travail non enregistré est perdu).<br>**Correction :** une dizaine de lignes, comme celle déjà faite dans plume-term : libérer l'ancien clavier ou l'ancienne souris quand ils disparaissent, en redemander un quand ils reviennent. Rien ne change à l'apparence. |
+| 🟠 | **plume-hud : le clavier ne répond plus s'il est débranché puis rebranché pendant l'écran de connexion ou de verrouillage** | **Quand ça arrive :** sur un PC avec un clavier USB (ou sans fil avec dongle), si le clavier est débranché puis rebranché, ou se met en veille puis se reconnecte, alors que l'écran de connexion ou de verrouillage est affiché. Un portable n'est pas concerné tant qu'on utilise son clavier intégré, qui ne disparaît jamais.<br>**Ce qu'on voit :** l'écran reste affiché mais les frappes ne font plus rien : impossible de taper son mot de passe, donc de se connecter ou de déverrouiller. La souris peut avoir le même problème.<br>**Pourquoi :** quand le dernier clavier disparaît, le compositeur (sway ou cage) annonce qu'il n'y a « plus de clavier », puis « de nouveau un clavier » au rebranchement. Une appli Wayland doit alors abandonner l'ancien objet clavier, devenu inerte, et en demander un nouveau. plume-hud garde l'ancien et n'en redemande jamais (`seat_caps` dans `hud/main.c`).<br>**Contournement en attendant (non testé) :** relancer plume-hud, car une nouvelle copie récupère le clavier rebranché. `Ctrl + Alt + F2`, se connecter en mode texte, puis : écran de connexion → `sudo rc-service greetd restart` ; écran de verrouillage → `pkill plume-hud && WAYLAND_DISPLAY=wayland-1 plume-hud --lock &`, puis revenir sur l'écran de sway (`Ctrl + Alt + F7` avec greetd, `F1` sinon). Attention : tuer plume-hud sans le relancer laisse la session verrouillée sans rien pour taper le mot de passe (c'est voulu, pour la sécurité). En dernier recours : redémarrer (le travail non enregistré est perdu).<br>**Correction :** une dizaine de lignes, comme celle déjà faite dans plume-term : libérer l'ancien clavier ou l'ancienne souris quand ils disparaissent, en redemander un quand ils reviennent. Rien ne change à l'apparence. |
 
 ### Stabilité et matériel
 
@@ -629,8 +673,6 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Tâche |
 |---|---|
-| 🟠 | **Commandes familières pour les habitués d'Ubuntu/Debian** : `sudo` et `apt install …` qui fonctionnent (traduits vers `doas` et `apk`), pour suivre les tutos trouvés sur Internet sans changer ses habitudes |
-| 🟠 | **Logithèque Plume** : une appli graphique pour installer et désinstaller des logiciels, à la manière de GNOME Logiciels (recherche, catégories, captures, mises à jour), qui gère à la fois les paquets Alpine et Flatpak, au style HUD |
 
 ### Jeux vidéo
 

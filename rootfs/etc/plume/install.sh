@@ -54,6 +54,6 @@ cat <<'END'
 Installation terminée. Retire la clé USB puis tape : reboot
 Ensuite, connecte-toi avec ton utilisateur et lance :
 
-    doas sh /etc/plume/desktop.sh
+    sudo sh /etc/plume/desktop.sh
 
 END

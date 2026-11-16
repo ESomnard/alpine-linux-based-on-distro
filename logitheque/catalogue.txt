@@ -1,0 +1,91 @@
+# Logithèque Plume — catalogue des applications mises en avant.
+# Format : Nom | Catégorie | paquet Alpine | identifiant Flathub | commande terminal | Résumé
+#   - un champ vide = pas disponible par cette source
+#   - « commande terminal » : pour les outils sans fenêtre, lancés dans plume-term
+# La recherche trouve aussi tous les autres paquets Alpine et Flathub.
+
+# --- Internet ---
+Firefox | Internet | firefox | org.mozilla.firefox | | Le navigateur web libre de Mozilla
+Chromium | Internet | chromium | org.chromium.Chromium | | Navigateur web rapide, base libre de Google Chrome
+Thunderbird | Internet | thunderbird | org.mozilla.Thunderbird | | Courrier électronique, agenda et contacts
+qBittorrent | Internet | qbittorrent | org.qbittorrent.qBittorrent | | Client BitTorrent complet, sans publicité
+Transmission | Internet | transmission-gtk | | | Client BitTorrent simple et léger
+FileZilla | Internet | filezilla | org.filezillaproject.Filezilla | | Transfert de fichiers FTP et SFTP
+Telegram | Internet | telegram-desktop | org.telegram.desktop | | Messagerie rapide et synchronisée
+Discord | Internet | | com.discordapp.Discord | | Discussions vocales et textuelles pour communautés et joueurs
+Signal | Internet | | org.signal.Signal | | Messagerie chiffrée de bout en bout
+Fractal | Internet | fractal | org.gnome.Fractal | | Messagerie Matrix décentralisée
+NewsFlash | Internet | newsflash | io.gitlab.news_flash.NewsFlash | | Lecteur de flux RSS
+Remmina | Internet | remmina | org.remmina.Remmina | | Bureau à distance (RDP, VNC, SSH)
+
+# --- Bureautique ---
+LibreOffice | Bureautique | libreoffice | org.libreoffice.LibreOffice | | Suite bureautique : texte, tableur, présentations
+AbiWord | Bureautique | abiword | com.abisource.AbiWord | | Traitement de texte léger
+Gnumeric | Bureautique | gnumeric | org.gnome.Gnumeric | | Tableur rapide et précis
+Xournal++ | Bureautique | xournalpp | com.github.xournalpp.xournalpp | | Prise de notes manuscrites et annotation de PDF
+Foliate | Bureautique | foliate | com.github.johnfactotum.Foliate | | Lecteur de livres numériques (EPUB)
+Calibre | Bureautique | | com.calibre_ebook.calibre | | Bibliothèque et convertisseur de livres numériques
+Text Editor | Bureautique | gnome-text-editor | org.gnome.TextEditor | | Éditeur de texte simple et moderne
+Mousepad | Bureautique | mousepad | | | Éditeur de texte très léger
+
+# --- Multimédia ---
+VLC | Multimédia | vlc | org.videolan.VLC | | Lit toutes les vidéos et musiques
+Celluloid | Multimédia | celluloid | io.github.celluloid_player.Celluloid | | Lecteur vidéo simple basé sur mpv
+Audacity | Multimédia | audacity | org.audacityteam.Audacity | | Enregistrement et montage audio
+Kdenlive | Multimédia | kdenlive | org.kde.kdenlive | | Montage vidéo complet
+Shotcut | Multimédia | shotcut | org.shotcut.Shotcut | | Montage vidéo simple
+OBS Studio | Multimédia | obs-studio | com.obsproject.Studio | | Enregistrement d'écran et diffusion en direct
+HandBrake | Multimédia | handbrake | fr.handbrake.ghb | | Conversion de vidéos
+Strawberry | Multimédia | strawberry | org.strawberrymusicplayer.strawberry | | Lecteur et bibliothèque musicale
+Rhythmbox | Multimédia | rhythmbox | org.gnome.Rhythmbox3 | | Lecteur de musique et radios
+Spotify | Multimédia | | com.spotify.Client | | Musique en streaming
+Shortwave | Multimédia | | de.haeckerfelix.Shortwave | | Radios du monde entier
+
+# --- Graphisme ---
+GIMP | Graphisme | gimp | org.gimp.GIMP | | Retouche photo et création graphique
+Inkscape | Graphisme | inkscape | org.inkscape.Inkscape | | Dessin vectoriel (SVG)
+Krita | Graphisme | krita | org.kde.krita | | Peinture numérique
+Blender | Graphisme | blender | org.blender.Blender | | Modélisation 3D, animation et rendu
+darktable | Graphisme | darktable | org.darktable.Darktable | | Développement de photos RAW
+
+# --- Jeux ---
+Steam | Jeux | | com.valvesoftware.Steam | | La plus grande boutique de jeux PC
+Heroic Games Launcher | Jeux | | com.heroicgameslauncher.hgl | | Jeux Epic Games, GOG et Amazon
+Lutris | Jeux | | net.lutris.Lutris | | Lance des jeux de toutes provenances
+RetroArch | Jeux | retroarch | org.libretro.RetroArch | | Émulateur multi-consoles
+Dolphin | Jeux | dolphin-emu | org.DolphinEmu.dolphin-emu | | Émulateur GameCube et Wii
+PPSSPP | Jeux | ppsspp | org.ppsspp.PPSSPP | | Émulateur PSP
+PCSX2 | Jeux | | net.pcsx2.PCSX2 | | Émulateur PlayStation 2
+SuperTuxKart | Jeux | supertuxkart | net.supertuxkart.SuperTuxKart | | Course de karts avec Tux
+SuperTux | Jeux | supertux | org.supertuxproject.SuperTux | | Jeu de plateforme classique
+Luanti | Jeux | luanti | | | Monde de blocs infini (anciennement Minetest)
+0 A.D. | Jeux | | com.play0ad.zeroad | | Stratégie historique en temps réel
+
+# --- Développement ---
+Visual Studio Code | Développement | | com.visualstudio.code | | Éditeur de code de Microsoft
+Geany | Développement | geany | org.geany.Geany | | Éditeur de code léger et rapide
+Neovim | Développement | neovim | | nvim | Éditeur de texte du terminal, extensible
+Git | Développement | git | | | Gestion de versions
+Outils de compilation | Développement | build-base | | | gcc, make et l'essentiel pour compiler
+Python 3 | Développement | python3 | | python3 | Langage de programmation Python
+Node.js | Développement | nodejs | | node | JavaScript côté serveur
+Distrobox | Développement | distrobox | | | Ubuntu, Debian, Fedora… dans un conteneur, avec leur gestionnaire de paquets
+Podman | Développement | podman | | | Conteneurs sans démon, compatible Docker
+Docker | Développement | docker | | | Conteneurs
+
+# --- Utilitaires ---
+KeePassXC | Utilitaires | keepassxc | org.keepassxc.KeePassXC | | Gestionnaire de mots de passe
+Qalculate! | Utilitaires | qalculate-gtk | io.github.Qalculate | | Calculatrice puissante (unités, devises)
+Galculator | Utilitaires | galculator | | | Calculatrice scientifique légère
+Engrampa | Utilitaires | engrampa | | | Ouvre et crée des archives (zip, tar, 7z…)
+Syncthing | Utilitaires | syncthing | | | Synchronise des dossiers entre appareils
+btop | Utilitaires | btop | | btop | Moniteur système du terminal
+Flatseal | Utilitaires | | com.github.tchx84.Flatseal | | Gère les permissions des applis Flatpak
+
+# --- Système ---
+Wifi (iwgtk) | Système | iwgtk | | | Réglages du wifi en mode graphique
+Son (pavucontrol) | Système | pavucontrol | | | Réglage fin du son et des périphériques audio
+Bluetooth (blueman) | Système | blueman | | | Appareils Bluetooth
+Imprimantes | Système | system-config-printer | | | Ajouter et régler des imprimantes
+GParted | Système | gparted | | | Partitionner les disques
+Disques | Système | gnome-disk-utility | | | Disques, clés USB et images disque

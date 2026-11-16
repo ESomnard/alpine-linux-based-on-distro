@@ -1,5 +1,6 @@
 # Socle système pour un usage quotidien (tout est petit)
-doas            # remplaçant minimal de sudo
+sudo            # droits administrateur (« sudo commande »), comme sur Ubuntu
+doas            # remplaçant minimal de sudo, gardé pour les scripts d'Alpine
 dbus            # bus de messages (requis par iwd, pipewire, firefox)
 seatd           # gestion des sessions graphiques, bien plus léger qu'elogind
 iwd             # wifi (remplace NetworkManager + wpa_supplicant)

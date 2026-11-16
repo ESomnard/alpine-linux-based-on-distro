@@ -325,8 +325,8 @@ static const char *power_cmd(void)
 	for (int i = 0; i < S.napps; i++)
 		if (S.apps[i].power)
 			return S.apps[i].cmd;
-	return "swaynag -t warning -m 'Que faire ?' -B 'Éteindre' 'doas /sbin/poweroff' "
-	       "-B 'Redémarrer' 'doas /sbin/reboot' -B 'Déconnexion' 'swaymsg exit'";
+	return "swaynag -t warning -m 'Que faire ?' -B 'Éteindre' 'sudo -n /sbin/poweroff' "
+	       "-B 'Redémarrer' 'sudo -n /sbin/reboot' -B 'Déconnexion' 'swaymsg exit'";
 }
 
 static void click_bar(struct output *o, uint32_t button)

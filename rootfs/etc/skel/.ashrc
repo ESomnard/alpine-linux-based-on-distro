@@ -10,7 +10,7 @@ alias ll='ls -lah --color=auto'
 alias la='ls -A --color=auto'
 alias ..='cd ..'
 alias grep='grep --color=auto'
-alias maj='doas apk upgrade -U'
+alias maj='sudo apt upgrade'
 alias info='fastfetch'
 
 # fiche système au premier terminal de la session

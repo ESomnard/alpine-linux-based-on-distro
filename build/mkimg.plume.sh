@@ -10,5 +10,5 @@ profile_plume() {
 	hostname="plume"
 	apkovl="genapkovl-plume.sh"
 	# Outils utiles dès le live (wifi, partitionnement)
-	apks="$apks iwd wpa_supplicant e2fsprogs dosfstools parted"
+	apks="$apks iwd wpa_supplicant e2fsprogs dosfstools parted sudo"
 }

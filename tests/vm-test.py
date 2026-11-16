@@ -131,12 +131,14 @@ vm.run_interactive("sh /etc/plume/install.sh", [
 ], timeout=1200)
 step("Installation sur disque terminée")
 
-# Uniquement pour le test : console série sur le système installé + doas sans mot de passe
+# Uniquement pour le test : console série sur le système installé + sudo/doas sans mot de passe
 vm.run(r"""for p in /dev/vda1 /dev/vda2 /dev/vda3; do mount $p /mnt 2>/dev/null || continue; """
        r"""for f in /mnt/extlinux.conf /mnt/boot/extlinux.conf; do [ -f $f ] && { grep -q ttyS0 $f || sed -i -E 's/^([[:space:]]*APPEND .*)/\1 console=ttyS0,115200/' $f; }; done; """
        r"""[ -f /mnt/etc/update-extlinux.conf ] && sed -i 's/^default_kernel_opts="/&console=ttyS0,115200 /' /mnt/etc/update-extlinux.conf; """
        r"""[ -f /mnt/etc/inittab ] && { grep -q '^ttyS0' /mnt/etc/inittab || echo 'ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100' >> /mnt/etc/inittab; }; """
        r"""[ -d /mnt/etc/doas.d ] && echo 'permit nopass test' > /mnt/etc/doas.d/zz-test.conf; """
+       r"""[ -d /mnt/etc/sudoers.d ] && { echo 'test ALL=(ALL) NOPASSWD: ALL' > /mnt/etc/sudoers.d/zz-test; chmod 0440 /mnt/etc/sudoers.d/zz-test; }; """
+       r"""[ -d /mnt/etc/plume ] && echo "SUDO-SUR-DISQUE: $(ls /mnt/usr/bin/sudo 2>&1) $(ls -l /mnt/etc/sudoers.d/plume 2>&1)"; """
        r"""[ -d /mnt/etc/plume ] && echo "PLUME-SUR-DISQUE: $(ls /mnt/etc/plume | tr '\n' ' ')"; umount /mnt; done""")
 vm.send("poweroff\r")
 vm.wait_eof()
@@ -148,18 +150,24 @@ vm.login("test")
 step("Système installé (avant desktop.sh)")
 vm.run('df -h / | tail -1; free -m | sed -n 2p; echo "paquets: $(apk info | wc -l)"')
 
+step("sudo et apt (avant le bureau)")
+vm.run('command -v sudo apt apt-get; sudo -n true && echo "SUDO OK"; '
+       'sudo apt update | tail -1; sudo apt install -y tree build-essential 2>&1 | grep -E "→|OK:"; '
+       'apt show tree | head -3; apt search fastfetch | head -2; sudo apt remove -y tree | tail -1; '
+       'apt install tree; echo "code sans sudo: $?"', 900)
+
 step("Lancement de desktop.sh (long en émulation)")
-vm.run_interactive("doas sh /etc/plume/desktop.sh", [
+vm.run_interactive("sudo sh /etc/plume/desktop.sh", [
     (r"ERROR: [^\r\n]*", lambda m: (step(f"apk : {m}"), None)[1]),
 ], timeout=5400)
 step("desktop.sh terminé, redémarrage")
-vm.send("doas reboot\r")
+vm.send("sudo reboot\r")
 vm.login("test")
 
 step("Vérifications après redémarrage")
 vm.run("rc-status default | grep -E 'dbus|seatd|iwd|zram'; cat /proc/swaps; id")
 vm.run('df -h / | tail -1; free -m | sed -n 2p; echo "paquets: $(apk info | wc -l)"')
-vm.run('for p in sway foot plume-term plume-terminal fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
+vm.run('for p in sudo apt apt-get plume-logitheque sway foot plume-term plume-terminal fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
        'command -v $p >/dev/null && echo "OK  $p" || echo "MANQUE $p"; done; '
        'ls /usr/share/ibus/component/; ls /usr/share/fonts')
 
@@ -167,7 +175,7 @@ step("Écran de connexion (greetd + plume-hud)")
 vm.run('command -v plume-hud && ls -l /usr/local/bin/plume-hud; '
        'for p in gcc make wayland-dev; do apk info -e $p >/dev/null && echo "RESTE $p" || echo "SUPPRIME $p"; done; '
        'rc-status default | grep greetd; sleep 20; ps -o user,args | grep -E "[c]age|[p]lume-hud"')
-vm.run("doas -u greetd sh -c 'export XDG_RUNTIME_DIR=/var/lib/greetd/runtime; "
+vm.run("sudo -u greetd sh -c 'export XDG_RUNTIME_DIR=/var/lib/greetd/runtime; "
        "export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR | grep wayland- | grep -v lock | head -1); "
        "grim /tmp/greeter.png' && ls -l /tmp/greeter.png", 180)
 vm.run("echo ===B64START greeter===; base64 /tmp/greeter.png; echo ===B64END===", 900)
@@ -192,16 +200,21 @@ vm.run("plume-term --version; (ls -d ~/Documents ~/Bureau; plume-term --hud -e s
        "echo \"fenetres plume-term: $(swaymsg -t get_tree | grep -c '\"app_id\": \"plume-term\"')\"; grim /tmp/term.png && ls -l /tmp/term.png; cat /tmp/term.log; pkill plume-term", 180)
 vm.run("echo ===B64START terminal===; base64 /tmp/term.png; echo ===B64END===", 900)
 
+step("Logithèque Plume")
+vm.run("ls -l /usr/local/bin/plume-logitheque /usr/local/share/plume/logitheque.txt; (plume-logitheque > /tmp/lg.log 2>&1 &) ; sleep 25; "
+       "echo \"fenetres logitheque: $(swaymsg -t get_tree | grep -c '\"app_id\": \"plume-logitheque\"')\"; grim /tmp/lg.png && ls -l /tmp/lg.png; cat /tmp/lg.log; pkill plume-logitheque", 180)
+vm.run("echo ===B64START logitheque===; base64 /tmp/lg.png; echo ===B64END===", 900)
+
 step("Écran de verrouillage (plume-hud --lock)")
 vm.run("(plume-hud --lock > /tmp/lock.log 2>&1 &) ; sleep 15; grim /tmp/lock.png && ls -l /tmp/lock.png; cat /tmp/lock.log", 180)
 vm.run("echo ===B64START verrou===; base64 /tmp/lock.png; echo ===B64END===", 900)
 
 step("slim-firmware.sh")
-vm.run_interactive("doas sh /etc/plume/slim-firmware.sh", [
+vm.run_interactive("sudo sh /etc/plume/slim-firmware.sh", [
     (r"Continuer \?", "o\r"),
 ], timeout=900)
 vm.run('df -h / | tail -1; echo "paquets: $(apk info | wc -l)"')
 
 step("SUCCES : tous les tests sont passés")
-vm.send("doas poweroff\r")
+vm.send("sudo poweroff\r")
 vm.wait_eof()
