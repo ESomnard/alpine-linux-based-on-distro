@@ -17,11 +17,22 @@ input type:touchpad {
     dwt enabled
 }
 
-# --- Apparence ---
-output * bg #1e1e2e solid_color
-font pango:DejaVu Sans 10
+# --- Apparence : palette du HUD Plume ---
+# fond d'écran HUD (généré par plume-wall), couleur unie en secours
+output * bg #02060b solid_color
+output * bg /usr/share/plume/wallpaper.png fill
+font pango:JetBrains Mono 10
 default_border pixel 2
-client.focused #b4befe #b4befe #1e1e2e #b4befe
+default_floating_border pixel 2
+titlebar_padding 10 4
+gaps inner 10
+gaps outer 6
+# classe                 bordure  fond     texte    indicateur bordure-enfant
+client.focused           #4fb8e0  #03080e  #e9f9ff  #9fe4ff    #4fb8e0
+client.focused_inactive  #1d5a78  #03080e  #5f8ea5  #1d5a78    #1d5a78
+client.unfocused         #0b2433  #02060b  #5f8ea5  #0b2433    #0b2433
+client.urgent            #ff5470  #03080e  #ff5470  #ff5470    #ff5470
+client.background        #02060b
 
 # --- Démarrage ---
 exec /usr/libexec/pipewire-launcher
@@ -110,14 +121,21 @@ bindsym XF86MonBrightnessDown exec brightnessctl set 5%-
 bindsym Print exec grim -g "$(slurp)" - | wl-copy
 bindsym Shift+Print exec grim ~/capture-$(date +%Y%m%d-%H%M%S).png
 
-# --- Barre ---
+# --- Barre + dock : plume-shell (HUD) ; swaybar + status.sh en secours ---
 bar {
+    swaybar_command plume-bar
     position top
+    height 26
+    font pango:JetBrains Mono 10
     status_command ~/.config/sway/status.sh
     colors {
-        background #1e1e2e
-        statusline #cdd6f4
-        focused_workspace #b4befe #b4befe #1e1e2e
+        background #02060bee
+        statusline #cdeefc
+        separator  #1d5a78
+        focused_workspace  #4fb8e0 #4fb8e0 #02060b
+        active_workspace   #1d5a78 #03080e #cdeefc
+        inactive_workspace #02060b #02060b #5f8ea5
+        urgent_workspace   #ff5470 #ff5470 #02060b
     }
 }
 

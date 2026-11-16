@@ -67,17 +67,22 @@ awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: rea
 	echo "  - $u"
 done
 
-log "Compilation de plume-hud (écran de connexion + verrouillage HUD)"
+log "Compilation de plume-hud (connexion + verrouillage) et plume-shell (barre + dock)"
 # outils de compilation installés temporairement, puis supprimés juste après
-BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev"
+BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev"
 HUD_OK=0
 # shellcheck disable=SC2086
 if apk add --virtual .plume-build $BUILD_DEPS; then
 	rm -rf /tmp/plume-hud && cp -r "$PLUME/hud" /tmp/plume-hud
 	if make -C /tmp/plume-hud && make -C /tmp/plume-hud install PREFIX=/usr/local; then
 		HUD_OK=1
+		mkdir -p /usr/share/plume
+		plume-wall /usr/share/plume/wallpaper.png 2560 1440 || true
 	fi
 	rm -rf /tmp/plume-hud
+	rm -rf /tmp/plume-shell && cp -r "$PLUME/shell" /tmp/plume-shell
+	make -C /tmp/plume-shell && make -C /tmp/plume-shell install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-shell
 	log "Suppression des outils de compilation"
 	apk del .plume-build
 fi
@@ -92,6 +97,9 @@ if [ "$HUD_OK" = 1 ]; then
 else
 	log "ATTENTION : plume-hud n'a pas pu être compilé — connexion texte + swaylock conservés"
 fi
+
+# lanceur de barre : plume-shell (barre + dock HUD), sinon swaybar
+install -Dm755 "$PLUME/conf/plume-bar" /usr/local/bin/plume-bar
 
 log "Nettoyage"
 rm -rf /var/cache/apk/*

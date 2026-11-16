@@ -1,0 +1,6 @@
+#!/bin/sh
+# Lancé par sway (swaybar_command) : barre + dock HUD, ou swaybar classique en secours.
+if command -v plume-shell >/dev/null 2>&1; then
+	exec plume-shell "$@"
+fi
+exec swaybar "$@"

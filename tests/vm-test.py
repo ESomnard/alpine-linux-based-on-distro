@@ -182,7 +182,8 @@ vm.run("swaymsg exec \"foot --hold sh -c '. /etc/os-release; echo \\$PRETTY_NAME
        "echo; free -m; echo; df -h /; echo; echo 你好 Plume'\" ; sleep 30", 180)
 vm.run('echo "fenetres foot: $(swaymsg -t get_tree | grep -c \'"app_id": "foot"\')"; '
        'echo "processus pipewire: $(ps | grep -c \'[p]ipewire\')"; '
-       'echo "ibus-daemon: $(ps | grep -c \'[i]bus-daemon\')"; free -m | sed -n 2p')
+       'echo "ibus-daemon: $(ps | grep -c \'[i]bus-daemon\')"; '
+       'echo "plume-shell: $(ps | grep -c \'[p]lume-shell\')"; ls -l /usr/local/bin/plume-shell /usr/share/plume/wallpaper.png; free -m | sed -n 2p')
 vm.run("grim /tmp/shot.png && ls -l /tmp/shot.png || tail -30 /tmp/sway.log", 180)
 vm.run("echo ===B64START bureau===; base64 /tmp/shot.png; echo ===B64END===", 900)
 

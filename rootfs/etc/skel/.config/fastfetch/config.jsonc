@@ -1,0 +1,30 @@
+// Plume — fiche système (commande : info)
+{
+  "logo": {
+    "source": "~/.config/fastfetch/logo.txt",
+    "type": "file",
+    "color": { "1": "38;2;79;184;224", "2": "38;2;233;249;255", "3": "38;2;95;142;165" },
+    "padding": { "top": 1, "right": 3 }
+  },
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "38;2;79;184;224", "title": "38;2;233;249;255" },
+    "key": { "width": 10 }
+  },
+  "modules": [
+    "title",
+    { "type": "custom", "format": "\u001b[38;2;29;90;120m────────────────────────────" },
+    { "type": "os", "key": "OS" },
+    { "type": "kernel", "key": "NOYAU" },
+    { "type": "uptime", "key": "UPTIME" },
+    { "type": "packages", "key": "PAQUETS" },
+    { "type": "wm", "key": "BUREAU" },
+    { "type": "cpu", "key": "CPU" },
+    { "type": "memory", "key": "RAM" },
+    { "type": "disk", "key": "DISQUE", "folders": "/" },
+    { "type": "battery", "key": "BATTERIE" },
+    { "type": "localip", "key": "IP" },
+    "break",
+    "colors"
+  ]
+}

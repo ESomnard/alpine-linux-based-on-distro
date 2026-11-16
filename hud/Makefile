@@ -15,10 +15,15 @@ PROTO_C   = xdg-shell-protocol.c ext-session-lock-v1-protocol.c
 
 OBJ = main.o draw.o sys.o auth.o xdg-shell-protocol.o ext-session-lock-v1-protocol.o
 
+all: plume-hud plume-wall
+
 plume-hud: $(OBJ)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
 $(OBJ): $(PROTO_H) hud.h
+
+plume-wall: wall.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ wall.c $(LDLIBS)
 
 xdg-shell-client-protocol.h:
 	$(SCANNER) client-header $(WL_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
@@ -29,11 +34,12 @@ ext-session-lock-v1-client-protocol.h:
 ext-session-lock-v1-protocol.c:
 	$(SCANNER) private-code $(WL_PROTOCOLS)/staging/ext-session-lock/ext-session-lock-v1.xml $@
 
-install: plume-hud
+install: all
 	install -Dm755 plume-hud $(DESTDIR)$(PREFIX)/bin/plume-hud
+	install -Dm755 plume-wall $(DESTDIR)$(PREFIX)/bin/plume-wall
 	install -Dm644 pam.d/plume-hud $(DESTDIR)/etc/pam.d/plume-hud
 
 clean:
-	rm -f plume-hud *.o $(PROTO_H) $(PROTO_C)
+	rm -f plume-hud plume-wall *.o $(PROTO_H) $(PROTO_C)
 
-.PHONY: install clean
+.PHONY: all install clean

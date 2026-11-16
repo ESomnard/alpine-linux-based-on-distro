@@ -23,7 +23,7 @@
 #define C_BRIGHT  0xe9f9ff
 #define C_CORNER  0x9fe4ff
 
-#define FONT_MONO "DejaVu Sans Mono"
+#define FONT_MONO "JetBrains Mono, DejaVu Sans Mono"
 #define FONT_CLOCK "DejaVu Sans"
 
 static const char *JOURS[] = { "DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI" };

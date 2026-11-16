@@ -1,4 +1,5 @@
 /plume-hud
+/plume-wall
 *.o
 *-protocol.c
 *-client-protocol.h

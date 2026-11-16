@@ -1,0 +1,17 @@
+# Plume — notifications, style HUD
+font=JetBrains Mono 10
+background-color=#03080ef0
+text-color=#cdeefc
+border-color=#4fb8e0
+progress-color=over #1d5a78
+border-size=2
+border-radius=12
+padding=14
+margin=14
+width=380
+default-timeout=6000
+format=<b><span color="#4fb8e0">%s</span></b>\n%b
+
+[urgency=high]
+border-color=#ff5470
+default-timeout=0

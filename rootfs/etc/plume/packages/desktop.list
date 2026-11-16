@@ -8,6 +8,8 @@ grim slurp      # captures d'écran
 wl-clipboard    # presse-papiers
 mesa-dri-gallium mesa-va-gallium   # pilotes graphiques libres + accélération vidéo
 font-dejavu
+font-jetbrains-mono             # police de dev (terminal, barre, HUD) ~7 Mo
+fastfetch                       # fiche système au lancement du terminal ~2 Mo
 # Claviers : AZERTY + QWERTY (inclus dans sway) et chinois pinyin
 ibus ibus-gtk3 ibus-libpinyin   # méthode de saisie pinyin (~100 Mo, la plus légère sans Qt)
 font-wqy-zenhei                 # police chinoise (~17 Mo)

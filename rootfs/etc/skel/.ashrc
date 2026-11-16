@@ -1,0 +1,20 @@
+# Plume — shell interactif (ash), ambiance terminal hacker
+c()  { printf '\[\033[38;2;%sm\]' "$1"; }
+CYAN="$(c '79;184;224')" BRIGHT="$(c '233;249;255')" MUTED="$(c '95;142;165')" OK="$(c '79;224;164')" RST='\[\033[0m\]'
+PS1="${CYAN}┌─[${BRIGHT}\u${MUTED}@\h${CYAN}]─[${OK}\w${CYAN}]
+└─➜${RST} "
+unset -f c
+
+alias ls='ls --color=auto'
+alias ll='ls -lah --color=auto'
+alias la='ls -A --color=auto'
+alias ..='cd ..'
+alias grep='grep --color=auto'
+alias maj='doas apk upgrade -U'
+alias info='fastfetch'
+
+# fiche système au premier terminal de la session
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ ! -e "$XDG_RUNTIME_DIR/.plume-fetch" ] && command -v fastfetch >/dev/null; then
+	: > "$XDG_RUNTIME_DIR/.plume-fetch"
+	fastfetch
+fi

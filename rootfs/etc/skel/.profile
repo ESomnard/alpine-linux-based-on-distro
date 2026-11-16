@@ -8,6 +8,9 @@ if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
 	mkdir -pm 0700 "$XDG_RUNTIME_DIR"
 fi
 
+# Shell interactif (prompt, alias) — lu par ash pour chaque terminal
+export ENV="$HOME/.ashrc"
+
 # Méthode de saisie (pinyin) pour les applis GTK/Qt/X11
 export GTK_IM_MODULE=ibus QT_IM_MODULE=ibus XMODIFIERS=@im=ibus
 

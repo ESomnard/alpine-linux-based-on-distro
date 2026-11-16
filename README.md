@@ -14,6 +14,7 @@ Ce projet a été **conçu et dirigé par ESomnard** et
 |---|---|
 | Idée et objectif du projet | Écriture du code (scripts, configs, build, tests) |
 | Design et fonctionnalités de l'écran HUD (projet d'origine *HUD Lockscreen*) | Réécriture native du HUD en C (`plume-hud`) |
+| Direction artistique du bureau (dev / hacker / Mac, basé sur le HUD) | Barre + dock natifs (`plume-shell`), thème, fond d'écran |
 | Exigences : légèreté, usage quotidien, claviers QWERTY / AZERTY / pinyin, écran de verrouillage, test en VM | Choix techniques (sway, iwd, IBus, zram…) et mesures de poids |
 | Pilotage, priorités, relecture et validation | Construction de l'ISO, tests en VM, recherche et correction des bugs |
 | Tests manuels | Rédaction de la documentation |
@@ -65,12 +66,27 @@ Mesuré dans le test automatique, une fois tout installé : **1,1 Go sur le disq
 | Firmwares | **seulement ceux de ton matériel** | tous (~770 Mo) | Détectés à l'installation + `slim-firmware.sh` |
 | Connexion et verrouillage | GDM / SDDM (100+ Mo), Electron (~250 Mo) | **plume-hud** (~95 Ko) | Écrit en C, outils de compilation supprimés après |
 
-### Bureau (Wayland)
+### Bureau (Wayland) — style HUD « dev / hacker / Mac »
+
+Tout le bureau reprend l'identité visuelle de l'écran de connexion : bleu nuit `#02060b`,
+traits cyan lumineux `#4fb8e0`, équerres dans les coins, police **JetBrains Mono**.
+
+```
+┌◆ PLUME  [1] 2 3 │      FOOT  ~/projets      │ CPU ▂▃▅ 12% │ RAM 18% │ ●WIFI │ lun 16 nov 23:41 ⏻┐
+│  ┌──────────────────────────┐ ┌──────────────────────────┐   (bordure cyan = fenêtre active)  │
+│  │ ┌─[esomnard@plume]─[~]   │ │                          │                                    │
+│  │ └─➜ █                    │ │                          │                                    │
+│  └──────────────────────────┘ └──────────────────────────┘                                    │
+│                  ╭──── >_  ◎  ▤  ✎  ▶  ◧  ◈ │ ⏻ ────╮                                      │
+└──────────────────╰─────•──────────────────────────────╯──────────────────────────────────────┘
+```
+
 
 | Rôle | Logiciel |
 |---|---|
-| Gestionnaire de fenêtres | **sway** (fenêtres en mosaïque, ~100 Mo de RAM) |
-| Barre d'état | **swaybar** + script shell (clavier, wifi, volume, batterie, date) |
+| Gestionnaire de fenêtres | **sway** (mosaïque, marges, bordures cyan lumineuses) |
+| Barre du haut + dock | **plume-shell** (maison, ~80 Ko) : bureaux, fenêtre active, CPU en graphe, RAM, réseau, son, batterie, heure ; dock avec applis ouvertes et info-bulles |
+| Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME |
 | Terminal | **foot** |
 | Lanceur d'applications | **fuzzel** |
 | Notifications | **mako** |
@@ -81,7 +97,8 @@ Mesuré dans le test automatique, une fois tout installé : **1,1 Go sur le disq
 | Son | **PipeWire** + WirePlumber (compatible PulseAudio et ALSA) |
 | Graphisme | **Mesa** (+ accélération vidéo Intel si détectée) |
 | Claviers | **AZERTY + QWERTY** (`Alt + Maj`) et **chinois pinyin** via IBus (`Super + Espace`) |
-| Polices | DejaVu + WenQuanYi Zen Hei (chinois) |
+| Polices | **JetBrains Mono** (dev) + DejaVu + WenQuanYi Zen Hei (chinois) |
+| Terminal « hacker » | invite `┌─[moi@plume]─[~]` / `└─➜`, fiche système **fastfetch** au premier terminal, alias (`ll`, `maj`, `info`) |
 
 ### Applications
 
@@ -115,6 +132,8 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Captures d'écran dans le test automatique (connexion, bureau, verrouillage) | ✅ Testé en VM |
 | `plume-hud` : verrou, greeter, mauvais / bon mot de passe | ✅ Testé dans un sway virtuel (`tests/hud-preview.sh`) |
 | `plume-hud` intégré : compilé puis outils supprimés, greetd au démarrage, verrouillage depuis sway | ✅ Testé en VM |
+| Thème du bureau (sway, foot, fuzzel, mako, GTK, fond d'écran) | ✅ Testé dans un sway virtuel (`tests/desktop-preview.sh`) |
+| `plume-shell` (barre + dock) | ✅ Testé en VM (barre, dock, son, applis ouvertes) — bureau complet : ~150 Mo de RAM |
 | Wifi, veille, luminosité, touches multimédia | ⚪ Codé, à tester sur un vrai PC |
 | Démarrage UEFI | ⚪ À tester |
 | Chiffrement du disque | ⚪ À faire |
@@ -166,12 +185,16 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   └── run-qemu.sh               # VM locale si QEMU est installé sur la machine
 ├── hud/                          # plume-hud : écran de connexion + verrouillage HUD (C)
 │   ├── main.c draw.c sys.c auth.c hud.h Makefile
+│   ├── wall.c                    # plume-wall : générateur du fond d'écran
 │   └── README.md                 # détails du HUD
+├── shell/                        # plume-shell : barre du haut + dock (C, layer-shell)
+│   └── main.c draw.c ipc.c json.c sys.c shell.h Makefile
 ├── tests/
 │   ├── vm-test.sh                # test automatique complet (QEMU dans Docker)
 │   ├── vm-test.py                # pilote la VM par la console série (pexpect)
 │   ├── vm-gui.sh                 # VM graphique accessible en VNC
 │   ├── hud-preview.sh            # teste plume-hud dans un sway virtuel (captures)
+│   ├── desktop-preview.sh        # aperçu du bureau (thème, barre, dock, lanceur)
 │   └── fake-greetd.py            # faux greetd pour tester l'écran de connexion
 └── rootfs/                       # fichiers copiés tels quels dans le système
     └── etc/
@@ -340,7 +363,7 @@ Le script :
 4. active les services `dbus`, `seatd`, `zram-init` et `iwd` ;
 5. règle le swap **zram** à la moitié de la RAM ;
 6. ajoute ton utilisateur aux groupes nécessaires (`seat`, `video`, `audio`, `input`…) et copie la config par défaut sans écraser l'existant ;
-7. **compile `plume-hud`**, l'écran de connexion et de verrouillage HUD, puis **supprime les outils de compilation** ;
+7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock) et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
 8. active **greetd**, qui affiche le HUD de connexion au démarrage ;
 9. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
 
@@ -404,6 +427,12 @@ La touche `Super` est la touche Windows (⌘ sur Mac).
 
 | Raccourci | Action |
 |---|---|
+| Clic sur `◆ PLUME` | Lanceur d'applications |
+| Clic sur un bureau / molette sur la barre | Changer de bureau |
+| Clic sur `SON` / molette dessus | Couper le son / régler le volume |
+| Clic sur le réseau | Ouvre `iwctl` (wifi) |
+| Clic sur `AZERTY` | Change de disposition |
+| Dock : clic / clic milieu | Affiche l'appli (ou la lance) / nouvelle fenêtre |
 | `Super + Entrée` | Terminal |
 | `Super + d` | Lanceur d'applications |
 | `Super + b` | Firefox |
@@ -470,6 +499,9 @@ Nouvelle version d'Alpine : remplace `v3.XX` dans `/etc/apk/repositories`, puis
 
 - **Paquets** : `rootfs/etc/plume/packages/*.list` (un nom par ligne, `#` pour un commentaire).
 - **Bureau** : `rootfs/etc/skel/.config/sway/config` (raccourcis, couleurs, claviers). Une fois installé, chaque utilisateur a sa copie dans `~/.config/sway/config`.
+- **Dock** : `/etc/plume/dock.conf` → copie-le dans `~/.config/plume/dock.conf` (`glyphe | nom | commande | app_id`), puis `swaymsg reload`.
+- **Fond d'écran** : `plume-wall ~/fond.png 1920 1080`, puis `output * bg ~/fond.png fill` dans la config sway.
+- **Couleurs** : la palette du HUD est commune à `hud/draw.c`, `shell/draw.c`, `hud/wall.c` et aux fichiers de `rootfs/etc/skel/.config/`.
 - **Autres claviers** : `xkb_layout fr,us` devient par ex. `fr,us,de`. Japonais : `ibus-anthy`, coréen : `ibus-hangul`.
 - **Nom de la distro** : `title`, `profile_abbrev` et `hostname` dans `build/mkimg.plume.sh`, et `rootfs/etc/motd`.
 - **Contenu de l'ISO** : variable `apks` dans `build/mkimg.plume.sh`.
