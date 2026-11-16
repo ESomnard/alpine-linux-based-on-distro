@@ -34,7 +34,8 @@ chmod 0440 "$tmp"/etc/sudoers.d/plume
 chmod 0755 "$tmp"/etc/plume/bin/apt
 chmod 0644 "$tmp"/etc/profile.d/plume.sh
 chmod 0755 "$tmp"/etc/skel/.config/sway/*.sh "$tmp"/etc/plume/conf/plume-greeter "$tmp"/etc/plume/conf/plume-bar \
-	"$tmp"/etc/plume/conf/plume-terminal
+	"$tmp"/etc/plume/conf/plume-terminal "$tmp"/etc/plume/conf/plume-menu \
+	"$tmp"/etc/plume/conf/plume-theme "$tmp"/etc/plume/conf/plume-emulation "$tmp"/etc/plume/conf/plume-maj
 chown -R 0:0 "$tmp"
 
 # Services minimum du live

@@ -2,6 +2,9 @@
 %wheel ALL=(ALL:ALL) ALL
 # Éteindre, redémarrer, mettre en veille : sans mot de passe
 %wheel ALL=(root) NOPASSWD: /sbin/poweroff, /sbin/reboot, /usr/sbin/zzz
+# Vérifier s'il y a des mises à jour (apk update + compte), sans mot de passe :
+# seulement cette commande exacte, elle n'installe rien
+%wheel ALL=(root) NOPASSWD: /usr/local/bin/plume-maj --verifier
 # Astérisques en tapant le mot de passe, pas de sermon à la première utilisation
 Defaults pwfeedback
 Defaults lecture=never

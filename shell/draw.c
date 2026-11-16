@@ -1,5 +1,6 @@
 /* plume-shell — dessin de la barre et du dock (palette et motifs de plume-hud). */
 #include "shell.h"
+#include "theme.h"
 
 #include <math.h>
 #include <pango/pangocairo.h>
@@ -8,15 +9,12 @@
 #include <time.h>
 
 #define C_BG      0x02060b
-#define C_LINE    0x4fb8e0
-#define C_LINEDIM 0x1d5a78
 #define C_TEXT    0xcdeefc
 #define C_MUTED   0x5f8ea5
 #define C_OK      0x4fe0a4
 #define C_ERR     0xff5470
 #define C_WARN    0xe6c86e
 #define C_BRIGHT  0xe9f9ff
-#define C_CORNER  0x9fe4ff
 #define FONT      "JetBrains Mono, DejaVu Sans Mono"
 #define FONT_SYM  "JetBrains Mono, DejaVu Sans, WenQuanYi Zen Hei"
 
@@ -161,9 +159,9 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 	cairo_paint(cr);
 	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 	cairo_pattern_t *g = cairo_pattern_create_linear(0, 0, W, 0);
-	cairo_pattern_add_color_stop_rgba(g, 0, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
-	cairo_pattern_add_color_stop_rgba(g, 0.5, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.55);
-	cairo_pattern_add_color_stop_rgba(g, 1, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0, ACC_RGB, 0.0);
+	cairo_pattern_add_color_stop_rgba(g, 0.5, ACC_RGB, 0.55);
+	cairo_pattern_add_color_stop_rgba(g, 1, ACC_RGB, 0.0);
 	cairo_set_source(cr, g);
 	cairo_rectangle(cr, 0, H - 1, W, 1);
 	cairo_fill(cr);
@@ -254,6 +252,17 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 		sep(cr, &rx, cy);
 	} else {
 		o->hit_vol = (struct rect){ 0 };
+	}
+
+	if (S.maj > 0) {
+		double mx0 = rx;
+		snprintf(buf, sizeof buf, "⬆ %d", S.maj);
+		seg_text(cr, &rx, cy, C_CORNER, buf);
+		seg_key(cr, &rx, cy, "MAJ");
+		o->hit_maj = (struct rect){ rx - 4, 0, mx0 - rx + 8, H };
+		sep(cr, &rx, cy);
+	} else {
+		o->hit_maj = (struct rect){ 0 };
 	}
 
 	double nx0 = rx;
@@ -380,7 +389,7 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 		bool run = app_is_running(a);
 
 		rrect(cr, tx, ty, tw, tw, 12 * sc);
-		cairo_set_source_rgba(cr, 79 / 255.0, 184 / 255.0, 224 / 255.0, 0.05 + 0.10 * hv + (run ? 0.04 : 0));
+		cairo_set_source_rgba(cr, ACC_RGB, 0.05 + 0.10 * hv + (run ? 0.04 : 0));
 		cairo_fill_preserve(cr);
 		if (hv > 0.05)
 			glow_stroke(cr, C_LINE, 1.2, hv);

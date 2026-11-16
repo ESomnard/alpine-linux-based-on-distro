@@ -115,6 +115,33 @@ static void read_net(void)
 	closedir(d);
 }
 
+/* mises à jour : compte écrit par « plume-maj --verifier » (root, via sudo sans
+ * mot de passe pour cette seule commande) ; vérifié 2 min après le démarrage
+ * puis toutes les 6 h. Notification quand le nombre change. */
+#define MAJ_FICHIER "/var/lib/plume/maj-dispo"
+static void read_maj(void)
+{
+	static double next_check = -1;
+	double t = now_s();
+	if (next_check < 0)
+		next_check = t + 120;
+	if (t >= next_check) {
+		next_check = t + 6 * 3600;
+		spawn("command -v plume-maj >/dev/null && sudo -n /usr/local/bin/plume-maj --verifier >/dev/null 2>&1");
+	}
+	char b[16];
+	int n = read_line(MAJ_FICHIER, b, sizeof b) ? atoi(b) : 0;
+	static int last;
+	if (n > 0 && n != last) {
+		char cmd[200];
+		snprintf(cmd, sizeof cmd,
+			 "notify-send -a Plume 'Mises à jour disponibles' '%d paquet(s) — clic sur ⬆ MAJ dans la barre'", n);
+		spawn(cmd);
+	}
+	last = n;
+	S.maj = n;
+}
+
 static void read_volume(void)
 {
 	S.vol = -1;
@@ -149,6 +176,7 @@ void sys_update(void)
 	read_power();
 	read_net();
 	read_volume();
+	read_maj();
 	ipc_refresh_inputs();
 	read_ime();
 	mark_dirty(SURF_BAR);
@@ -165,6 +193,7 @@ static const char *DEFAULT_DOCK =
 	"◧ | PDF | zathura | org.pwmt.zathura\n"
 	"◈ | Poste de pilotage | plume-term --hud -a plume-pilotage | plume-pilotage\n"
 	"▦ | Logithèque | plume-logitheque | plume-logitheque\n"
+	"⣿ | Toutes les applications | plume-menu | plume-lanceur\n"
 	"---\n"
 	"@power | Éteindre / redémarrer | swaynag -t warning -m 'Que faire ?' "
 	"-B 'Éteindre' 'sudo -n /sbin/poweroff' -B 'Redémarrer' 'sudo -n /sbin/reboot' "

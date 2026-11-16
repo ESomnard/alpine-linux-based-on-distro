@@ -74,9 +74,9 @@ awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: rea
 	echo "  - $u"
 done
 
-log "Compilation de plume-hud (connexion + verrouillage), plume-shell (barre + dock), plume-term (terminal + poste de pilotage) et la Logithèque"
+log "Compilation de plume-hud (connexion + verrouillage), plume-shell (barre + dock), plume-term (terminal + poste de pilotage), plume-lanceur (applications), plume-fonds (fond d'écran), plume-wifi et la Logithèque"
 # outils de compilation installés temporairement, puis supprimés juste après
-BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev libvterm-dev"
+BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev libvterm-dev librsvg-dev gdk-pixbuf-dev"
 HUD_OK=0
 # shellcheck disable=SC2086
 if apk add --virtual .plume-build $BUILD_DEPS; then
@@ -93,6 +93,15 @@ if apk add --virtual .plume-build $BUILD_DEPS; then
 	rm -rf /tmp/plume-term && cp -r "$PLUME/term" /tmp/plume-term
 	make -C /tmp/plume-term && make -C /tmp/plume-term install PREFIX=/usr/local || true
 	rm -rf /tmp/plume-term
+	rm -rf /tmp/plume-fonds && cp -r "$PLUME/fonds" /tmp/plume-fonds
+	make -C /tmp/plume-fonds && make -C /tmp/plume-fonds install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-fonds
+	rm -rf /tmp/plume-wifi && cp -r "$PLUME/wifi" /tmp/plume-wifi
+	make -C /tmp/plume-wifi && make -C /tmp/plume-wifi install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-wifi
+	rm -rf /tmp/plume-lanceur && cp -r "$PLUME/lanceur" /tmp/plume-lanceur
+	make -C /tmp/plume-lanceur && make -C /tmp/plume-lanceur install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-lanceur
 	rm -rf /tmp/plume-logitheque && cp -r "$PLUME/logitheque" /tmp/plume-logitheque
 	make -C /tmp/plume-logitheque && make -C /tmp/plume-logitheque install PREFIX=/usr/local || true
 	rm -rf /tmp/plume-logitheque
@@ -115,6 +124,12 @@ fi
 install -Dm755 "$PLUME/conf/plume-bar" /usr/local/bin/plume-bar
 # lanceur de terminal : plume-term, sinon foot
 install -Dm755 "$PLUME/conf/plume-terminal" /usr/local/bin/plume-terminal
+# toutes les applications : plume-lanceur (grille), fuzzel en secours
+install -Dm755 "$PLUME/conf/plume-menu" /usr/local/bin/plume-menu
+# couleur du thème (Apparence) et pack émulation
+install -Dm755 "$PLUME/conf/plume-theme" /usr/local/bin/plume-theme
+install -Dm755 "$PLUME/conf/plume-emulation" /usr/local/bin/plume-emulation
+install -Dm755 "$PLUME/conf/plume-maj" /usr/local/bin/plume-maj
 # apt, apt-get, apt-cache (traduits vers apk) partout, même hors connexion texte
 for c in apt apt-get apt-cache; do ln -sf /etc/plume/bin/apt "/usr/local/bin/$c"; done
 

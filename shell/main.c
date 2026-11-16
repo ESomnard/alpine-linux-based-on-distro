@@ -40,7 +40,7 @@ void mark_dirty(enum surf_kind kind)
 	}
 }
 
-static void spawn(const char *cmd)
+void spawn(const char *cmd)
 {
 	if (!cmd || !*cmd)
 		return;
@@ -333,7 +333,7 @@ static void click_bar(struct output *o, uint32_t button)
 {
 	double x = S.px, y = S.py;
 	if (in_rect(o->hit_logo, x, y)) {
-		spawn("fuzzel");
+		spawn("plume-menu");
 		return;
 	}
 	for (int i = 0; i < S.nws; i++)
@@ -346,7 +346,10 @@ static void click_bar(struct output *o, uint32_t button)
 	else if (in_rect(o->hit_vol, x, y))
 		spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
 	else if (in_rect(o->hit_net, x, y))
-		spawn("plume-terminal -a plume-wifi -T 'Wifi — iwctl' iwctl");
+		/* wifi : panneau plume-wifi, sinon iwctl dans le terminal */
+		spawn("command -v plume-wifi >/dev/null && exec plume-wifi || exec plume-terminal -a plume-iwctl -T 'Wifi — iwctl' iwctl");
+	else if (in_rect(o->hit_maj, x, y))
+		spawn("PLUME_MAJ_FENETRE=1 exec plume-terminal -a plume-maj -T 'Mises à jour' plume-maj");
 	else if (in_rect(o->hit_kb, x, y))
 		ipc_command("input type:keyboard xkb_switch_layout next");
 	(void)button;

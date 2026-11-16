@@ -86,11 +86,13 @@ traits cyan lumineux `#4fb8e0`, équerres dans les coins, police **JetBrains Mon
 |---|---|
 | Gestionnaire de fenêtres | **sway** (mosaïque, marges, bordures cyan lumineuses) |
 | Barre du haut + dock | **plume-shell** (maison, ~80 Ko) : bureaux, fenêtre active, CPU en graphe, RAM, réseau, son, batterie, heure ; dock avec applis ouvertes et info-bulles |
-| Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME |
+| Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME ; **plume-fonds** (maison, ~80 Ko) pour en changer : 6 autres fonds Plume, couleurs unies ou tes photos |
 | Poste de pilotage | **plume-term --hud** : le terminal en plein écran, entouré des performances (CPU, cœurs, RAM, swap, réseau, disques, processus), d'un explorateur de fichiers avec recherche et d'un clavier à l'écran — `Super + x` ou `◈` dans le dock |
+| Mises à jour | **plume-maj** : la barre vérifie toute seule (2 min après l'ouverture de session, puis toutes les 6 h) et affiche **⬆ N MAJ** + une notification ; un clic ouvre la liste (ancienne → nouvelle version), puis met à jour les paquets Alpine **et** les applis Flathub ; prévient s'il faut redémarrer (nouveau noyau). En terminal : `plume-maj`, `plume-maj --liste`, `plume-maj -y` |
+| Wifi | **plume-wifi** (maison, aucune dépendance en plus) : clic sur le réseau dans la barre → réseaux visibles avec leur signal, mot de passe, réseaux connus, déconnexion, wifi activé/désactivé ; parle à **iwd** par `iwctl` |
 | Logithèque | **plume-logitheque** (maison, ~120 Ko) : installer et désinstaller des applications comme GNOME Logiciels — catalogue en français par catégories, recherche dans tous les paquets Alpine et Flathub, mises à jour ; `▦` dans le dock ou « Logithèque » dans le lanceur |
 | Terminal | **plume-term** (maison, ~150 Ko + libvterm ~100 Ko) : terminal HUD avec onglets, historique, copier/coller, couleurs complètes, et mode poste de pilotage — **foot** reste installé en secours (`Super + Maj + Entrée`) |
-| Lanceur d'applications | **fuzzel** |
+| Toutes les applications | **plume-lanceur** (maison, ~75 Ko) : grille plein écran à la GNOME, vraies icônes, recherche, pages — `Super + d` / `Super + a`, `◆ PLUME` ou `⣿` dans le dock ; **fuzzel** en secours |
 | Notifications | **mako** |
 | Écran de connexion | **plume-hud** (HUD maison) lancé par **greetd** dans **cage** |
 | Écran de verrouillage | **plume-hud** (même HUD, protocole sécurisé) + **swayidle** : verrouillage auto à 5 min, avant la veille, en fermant le capot |
@@ -137,6 +139,13 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Thème du bureau (sway, foot, fuzzel, mako, GTK, fond d'écran) | ✅ Testé dans un sway virtuel (`tests/desktop-preview.sh`) |
 | `plume-shell` (barre + dock) | ✅ Testé en VM (barre, dock, son, applis ouvertes) — bureau complet : ~150 Mo de RAM |
 | `sudo` et `apt` (comme sur Ubuntu) | ✅ Testé en VM (sudo présent dès l'installation, `sudo apt update / install / remove`, `apt show / search`, refus sans `sudo`) et dans un Alpine 3.24 vierge (`apt-get`, `apt-cache`, `list`, `policy`, traduction des noms Debian, refus des `.deb`) |
+| `plume-lanceur` (grille des applications) | ✅ Testé en VM (ouverture, fermeture) et dans un sway virtuel (`tests/lanceur-preview.sh`) : vraies icônes PNG/SVG, noms en français, recherche, `Entrée` et clic lancent l'appli, `Échap` et 2ᵉ appel ferment — changement de page pas encore essayé (trop peu d'applis) |
+| Couleur du thème (`plume-theme`) | 🟡 Testé dans un sway virtuel : changement en direct, choix enregistré ; les 5 applis Plume compilées avec le thème, installées et lancées en VM |
+| Pack émulation (`plume-emulation`) | 🟡 Installation Alpine testée dans un Alpine vierge (tous les paquets existent, groupe `input`) ; partie Flathub et vrais jeux non testés |
+| Installation 100 % automatique (`install.sh --auto`) | ✅ Testée en VM (câble, aucune question) ; wifi et installation du bureau au premier démarrage pas encore testés |
+| `plume-maj` (mises à jour) | 🟡 Testé dans un conteneur Alpine 3.24.0 : 7 mises à jour trouvées et listées, `-y` les installe, compte remis à 0, vérification sans mot de passe autorisée et toute autre commande refusée ; indicateur de la barre compilé mais pas encore vu en VM |
+| `plume-wifi` (panneau wifi) | 🟡 Testé dans un sway virtuel avec un faux iwd (`tests/wifi-preview.sh`) : liste, mauvais puis bon mot de passe, réseau connu, déconnexion, wifi désactivé ; pas encore sur une vraie carte wifi |
+| `plume-fonds` (fond d'écran) | 🟡 Testé dans un sway virtuel (`tests/fonds-preview.sh`) : fonds Plume, mode Ajuster, photo JPEG, choix gardé après rechargement de sway, image supprimée sans erreur ; testé en VM (fonds générés, fenêtre, réapplication au démarrage) |
 | Logithèque Plume | 🟡 Testé dans un sway virtuel (`tests/logitheque-preview.sh`) : catalogue, recherche Alpine + Flathub, mauvais puis bon mot de passe, installation et suppression d'un paquet Alpine, protection des paquets vitaux, mises à jour, activation de Flathub — installation d'une appli Flathub pas encore testée (plusieurs centaines de Mo) ; test VM en cours |
 | `plume-term` (terminal) | ✅ Testé en VM (compilé sur la machine, lancé depuis sway) et dans un sway virtuel (`tests/term-preview.sh`) : couleurs 16/256/24 bits, styles, accents et touches mortes, chinois, cadres, htop, historique, onglets, copier/coller, sélection à la souris, zoom |
 | `plume-term --hud` (poste de pilotage) | ✅ Testé en VM (mesures réelles de la machine) et dans un sway virtuel avec souris et clavier virtuels : raccourcis, recherche, ouverture de fichier, « cd ici », fil d'Ariane, fichiers cachés, clavier à l'écran ; touches qui s'allument vérifiées à la main avec un vrai clavier (Mac, via VNC) ; ~35 Mo de RAM, ~1 à 2 % d'un cœur au repos |
@@ -197,6 +206,12 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   └── main.c draw.c ipc.c json.c sys.c shell.h Makefile
 ├── term/                         # plume-term : terminal HUD + poste de pilotage (Wayland + libvterm)
 │   └── main.c tab.c render.c hud.c sysinfo.c term.h hud.h Makefile
+├── fonds/                        # plume-fonds : choisir le fond d'écran (+ 6 fonds Plume générés)
+│   └── main.c ui.c images.c gen.c fonds.h Makefile
+├── wifi/                         # plume-wifi : panneau wifi HUD (iwd par iwctl)
+│   └── main.c ui.c iwd.c wifi.h Makefile
+├── lanceur/                      # plume-lanceur : toutes les applications en grille (à la GNOME)
+│   └── main.c apps.c draw.c lanceur.h Makefile
 ├── logitheque/                   # Logithèque Plume : installer des applications (Alpine + Flathub)
 │   ├── main.c ui.c backend.c proc.c logitheque.h Makefile
 │   └── catalogue.txt             # applications mises en avant (catégorie, sources, résumé en français)
@@ -208,6 +223,8 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   ├── term-preview.sh           # teste plume-term dans un sway virtuel (captures, mémoire, clics)
 │   ├── vpointer.c                # souris virtuelle pour les tests de clics
 │   ├── logitheque-preview.sh     # teste la Logithèque (mot de passe, installation, Flathub)
+│   ├── fonds-preview.sh          # teste le choix du fond d'écran (clics, photos, mémorisation)
+│   ├── lanceur-preview.sh        # teste la grille des applications (recherche, lancement, fermeture)
 │   ├── desktop-preview.sh        # aperçu du bureau (thème, barre, dock, lanceur)
 │   └── fake-greetd.py            # faux greetd pour tester l'écran de connexion
 └── rootfs/                       # fichiers copiés tels quels dans le système
@@ -343,6 +360,13 @@ Ou plus simplement avec **balenaEtcher** ou **Ventoy**.
 
 ## 7. Installer sur le disque
 
+> **Installation 100 % automatique** : copie `/etc/plume/install-auto.conf` (sur la clé, ou dans le live),
+> remplis-le (disque, identifiant, mot de passe, wifi éventuel), puis `sh /etc/plume/install.sh --auto ton-fichier.conf`.
+> Aucune question : le disque est effacé, le système installé, et au premier démarrage le bureau s'installe
+> tout seul (journal : `/var/log/plume-installation.log`), puis la machine redémarre.
+> Ce fichier contient ton mot de passe en clair : supprime-le après usage.
+
+
 1. Démarre le PC sur la clé (touche F12, F8, Échap ou Option selon la marque).
 2. Connecte-toi en **`root`** (pas de mot de passe sur le live).
 3. Lance :
@@ -379,7 +403,7 @@ Le script :
 4. active les services `dbus`, `seatd`, `zram-init` et `iwd` ;
 5. règle le swap **zram** à la moitié de la RAM ;
 6. ajoute ton utilisateur aux groupes nécessaires (`seat`, `video`, `audio`, `input`…) et copie la config par défaut sans écraser l'existant ;
-7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock), **`plume-term`** (terminal + poste de pilotage), la **Logithèque** et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
+7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock), **`plume-term`** (terminal + poste de pilotage), **`plume-lanceur`** (grille des applications), **`plume-fonds`** (fond d'écran, avec ses 6 fonds), **`plume-wifi`** (panneau wifi), la **Logithèque** et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
    crée aussi les dossiers Bureau, Documents, Téléchargements, Images, Musique, Vidéos ;
 8. active **greetd**, qui affiche le HUD de connexion au démarrage ;
 9. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
@@ -387,7 +411,8 @@ Le script :
 Au redémarrage, **l'écran de connexion HUD** s'affiche : tape ton mot de passe, sway démarre.
 Connexion texte de secours : `Ctrl + Alt + F1`.
 
-Si tu étais en wifi, reconnecte-toi une fois avec iwd, il s'en souviendra :
+Si tu étais en wifi, reconnecte-toi une fois : **clic sur le réseau dans la barre**, choisis
+ton réseau, tape le mot de passe, Entrée. iwd s'en souviendra. En texte, avec iwctl :
 ```sh
 iwctl station wlan0 scan
 iwctl station wlan0 get-networks
@@ -444,16 +469,16 @@ La touche `Super` est la touche Windows (⌘ sur Mac).
 
 | Raccourci | Action |
 |---|---|
-| Clic sur `◆ PLUME` | Lanceur d'applications |
+| Clic sur `◆ PLUME` ou `⣿` dans le dock | Toutes les applications (grille) |
 | Clic sur un bureau / molette sur la barre | Changer de bureau |
 | Clic sur `SON` / molette dessus | Couper le son / régler le volume |
-| Clic sur le réseau | Ouvre `iwctl` (wifi) |
+| Clic sur le réseau | Ouvre le panneau wifi (`plume-wifi`) |
 | Clic sur `AZERTY` | Change de disposition |
 | Dock : clic / clic milieu | Affiche l'appli (ou la lance) / nouvelle fenêtre |
 | `Super + x` | Poste de pilotage : terminal plein écran + système, réseau, fichiers, clavier |
 | `Super + Entrée` | Terminal (plume-term) |
 | `Super + Maj + Entrée` | Terminal de secours (foot) |
-| `Super + d` | Lanceur d'applications |
+| `Super + d` ou `Super + a` | Toutes les applications (grille) ; encore une fois pour fermer |
 | `Super + b` | Firefox |
 | `Super + e` | Gestionnaire de fichiers |
 | `Super + Maj + q` | Fermer la fenêtre |
@@ -534,9 +559,48 @@ Les touches mortes de l'AZERTY marchent (`^` puis `e` = `ê`).
 3. Choisis les caractères avec `Espace` ou les chiffres : 你好.
 4. `Super + Espace` pour revenir à la saisie normale.
 
+### Apparence : fond d'écran et couleur du thème (plume-fonds)
+
+« Apparence » dans la grille des applications (`Super + a`) :
+
+- **Couleur du thème** : Cyan, Émeraude, Violet, Ambre, Rouge ou Rose. Change d'un clic la barre, le dock,
+  le terminal, la grille des applications, la Logithèque, les bordures des fenêtres, foot, fuzzel et les
+  notifications (en ligne de commande : `plume-theme rouge`). L'écran de connexion reste cyan.
+
+- **Fonds Plume** : le fond HUD d'origine et 6 autres (Horizon, Aurore, Constellation, Circuit,
+  Topographie, Nébuleuse), générés à l'installation (~4 Mo) ;
+- **Couleurs unies** ;
+- **Mes images** : tes photos (JPEG, PNG, WebP…) trouvées dans Images, Bureau et Téléchargements ;
+- affichage : **Remplir**, **Ajuster**, **Centrer** ou **Mosaïque**.
+
+Un clic applique tout de suite. Le choix est gardé dans `~/.config/plume/fond.conf` et réappliqué
+au démarrage ; si l'image a été supprimée, Plume reprend son fond d'origine (sans erreur).
+L'écran de connexion et de verrouillage garde son décor HUD.
+
+### Émulateurs (pack « meilleur émulateur par console »)
+
+```sh
+plume-emulation --liste        # quel émulateur pour quelle console
+sudo plume-emulation           # paquets Alpine : NES, Game Boy/GBA, DS, PS1, N64, GameCube/Wii, PSP (~1 Go)
+sudo plume-emulation --tout    # + Flathub : SNES, PS2, PS3, Wii U, 3DS, Xbox, Dreamcast (plusieurs Go)
+```
+
+Chaque émulateur est aussi dans la Logithèque (catégorie Jeux). Les jeux et BIOS ne sont pas fournis :
+utilise tes propres copies. Les manettes sont reconnues (ton compte est ajouté au groupe `input`).
+
+### Toutes les applications (plume-lanceur)
+
+`Super + a` (comme GNOME), `Super + d`, `◆ PLUME` dans la barre ou `⣿` au bout du dock : toutes les
+applications installées (Alpine, Flathub, les tiennes) en **grille plein écran**, avec leurs icônes.
+
+- **Tape pour chercher** (nom, description, mots-clés, en français si l'appli est traduite) ; les applis
+  que tu lances souvent passent en premier dans les résultats ;
+- `Entrée` ou clic : lancer · flèches : choisir · `Page↑ / Page↓`, molette ou points en bas : changer de page ;
+- `Échap`, clic dans le vide, clic droit, ou le même raccourci : fermer.
+
 ### Logithèque Plume (installer des applications)
 
-`▦` dans le dock, ou « Logithèque » dans le lanceur (`Super + d`). Comme GNOME Logiciels, au style HUD :
+`▦` dans le dock, ou « Logithèque » dans la grille des applications (`Super + a`). Comme GNOME Logiciels, au style HUD :
 
 | Onglet | Ce qu'on y fait |
 |---|---|
@@ -658,15 +722,13 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 |---|---|
 | 🔴 | Tester sur un vrai PC : wifi, veille, son, luminosité, touches multimédia |
 | 🔴 | Tester le démarrage UEFI |
-| 🟢 | Installation 100 % automatique (fichier de réponses complet) |
-| 🟢 | Gestion du wifi en mode graphique (`iwgtk`) |
 
 ### Sécurité et mises à jour
 
 | Priorité | Tâche |
 |---|---|
 | 🟠 | **Sécuriser la distro** : pare-feu activé par défaut (nftables : tout bloquer en entrée sauf ce qui est demandé), chiffrement du disque en option dans `install.sh` (`setup-disk -e`), services réduits au strict nécessaire, réglages noyau durcis (`sysctl`) |
-| 🟠 | **Mises à jour simples** : une commande et un bouton dans la barre pour tout mettre à jour (système, applis Flatpak, outils Plume), avec une notification quand des mises à jour de sécurité sont disponibles |
+| 🟡 | **Mises à jour simples** : ✅ `plume-maj` + ⬆ MAJ dans la barre (paquets Alpine + Flatpak) ; reste : mettre à jour les outils Plume eux-mêmes (dépôt .apk Plume) et le passage à une nouvelle version d'Alpine |
 | 🟢 | Dépôt `.apk` Plume pour mettre à jour les configs et les outils maison avec `apk upgrade` |
 
 ### Applications
@@ -679,15 +741,12 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 | Priorité | Tâche |
 |---|---|
 | 🟠 | **Jeux PC** : Steam (via Flatpak, car Steam a besoin de glibc et Alpine utilise musl), Epic Games et GOG via **Heroic Games Launcher** ; jeux GOG installables aussi en local, hors ligne ; pilotes graphiques et Vulkan, manettes |
-| 🟢 | **Émulateurs de consoles** : RetroArch et des émulateurs dédiés (PlayStation, Nintendo…), avec les manettes configurées automatiquement |
 
 ### Bureau et apparence
 
 | Priorité | Tâche |
 |---|---|
-| 🟠 | **Changer de fond d'écran** facilement : plusieurs fonds Plume au choix, ou une image perso, depuis une fenêtre de réglages (le fond est aussi utilisé par l'écran de connexion) |
 | 🟢 | **Mode « Windows » avec `Ctrl + 9`** : bascule le bureau vers une disposition familière pour qui vient de Windows (barre des tâches en bas, menu Démarrer, fenêtres flottantes avec boutons fermer/agrandir, raccourcis Windows), puis retour au mode Plume avec le même raccourci. À vérifier : `Ctrl + 9` est déjà utilisé par les navigateurs (aller au dernier onglet) |
-| 🟢 | Identité visuelle : thèmes de couleurs au choix |
 
 ### Organisation du projet
 
