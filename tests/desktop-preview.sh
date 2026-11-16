@@ -1,5 +1,6 @@
 #!/bin/sh
 # Aperçu du bureau Plume (thème, fond d'écran, terminal, lanceur) dans un sway virtuel.
+# plume-term et son mode poste de pilotage : tests/term-preview.sh
 #   ./tests/desktop-preview.sh     -> out/desktop/*.png
 set -eu
 cd "$(dirname "$0")/.."

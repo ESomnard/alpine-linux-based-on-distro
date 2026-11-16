@@ -37,6 +37,8 @@ cp /work/hud/*.c /work/hud/*.h /work/hud/Makefile "$BUILD_HOME/rootfs/etc/plume/
 cp -r /work/hud/pam.d "$BUILD_HOME/rootfs/etc/plume/hud/"
 mkdir -p "$BUILD_HOME/rootfs/etc/plume/shell"
 cp /work/shell/*.c /work/shell/*.h /work/shell/Makefile "$BUILD_HOME/rootfs/etc/plume/shell/"
+mkdir -p "$BUILD_HOME/rootfs/etc/plume/term"
+cp /work/term/*.c /work/term/*.h /work/term/Makefile "$BUILD_HOME/rootfs/etc/plume/term/"
 mkdir -p "$BUILD_HOME/out"
 chown -R "$BUILD_USER:abuild" "$BUILD_HOME"
 

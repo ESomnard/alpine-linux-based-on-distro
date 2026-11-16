@@ -346,7 +346,7 @@ static void click_bar(struct output *o, uint32_t button)
 	else if (in_rect(o->hit_vol, x, y))
 		spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle");
 	else if (in_rect(o->hit_net, x, y))
-		spawn("foot -a plume-wifi -T 'Wifi — iwctl' iwctl");
+		spawn("plume-terminal -a plume-wifi -T 'Wifi — iwctl' iwctl");
 	else if (in_rect(o->hit_kb, x, y))
 		ipc_command("input type:keyboard xkb_switch_layout next");
 	(void)button;

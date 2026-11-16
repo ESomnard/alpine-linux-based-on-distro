@@ -1,0 +1,7 @@
+#!/bin/sh
+# Terminal de Plume : plume-term (HUD, onglets), foot en secours.
+# Les options courantes (-a ID, -T TITRE, commande…) marchent avec les deux.
+if command -v plume-term >/dev/null 2>&1; then
+	exec plume-term "$@"
+fi
+exec foot "$@"

@@ -1,6 +1,7 @@
 # Plume — configuration sway minimale. Doc : man 5 sway
 set $mod Mod4
-set $term foot
+# terminal HUD (plume-term), foot en secours
+set $term plume-terminal
 set $menu fuzzel
 # Écran de verrouillage HUD (plume-hud) ; swaylock en secours
 set $lock plume-hud -f || swaylock -f -c 1e1e2e
@@ -45,9 +46,13 @@ exec swayidle -w \
 
 # --- Raccourcis de base ---
 bindsym $mod+Return exec $term
+bindsym $mod+Shift+Return exec foot
 bindsym $mod+d exec $menu
 bindsym $mod+b exec firefox
 bindsym $mod+e exec pcmanfm
+# poste de pilotage HUD : performances, fichiers, clavier
+# poste de pilotage : terminal HUD plein écran avec système, réseau, fichiers, clavier
+bindsym $mod+x exec plume-term --hud -a plume-pilotage
 bindsym $mod+Shift+q kill
 bindsym $mod+Shift+c reload
 bindsym $mod+Escape exec $lock

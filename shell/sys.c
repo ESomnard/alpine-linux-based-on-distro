@@ -157,13 +157,13 @@ void sys_update(void)
 /* ------------------------------- dock -------------------------------- */
 
 static const char *DEFAULT_DOCK =
-	">_ | Terminal | foot | foot\n"
+	">_ | Terminal | plume-terminal | plume-term\n"
 	"◎ | Firefox | firefox | firefox\n"
 	"▤ | Fichiers | pcmanfm | pcmanfm\n"
-	"✎ | Éditeur | foot -a micro micro | micro\n"
+	"✎ | Éditeur | plume-terminal -a micro micro | micro\n"
 	"▶ | Vidéo et musique | mpv --player-operation-mode=pseudo-gui | mpv\n"
 	"◧ | PDF | zathura | org.pwmt.zathura\n"
-	"◈ | Système | foot -a plume-info sh -c 'fastfetch; exec sh' | plume-info\n"
+	"◈ | Poste de pilotage | plume-term --hud -a plume-pilotage | plume-pilotage\n"
 	"---\n"
 	"@power | Éteindre / redémarrer | swaynag -t warning -m 'Que faire ?' "
 	"-B 'Éteindre' 'doas /sbin/poweroff' -B 'Redémarrer' 'doas /sbin/reboot' "

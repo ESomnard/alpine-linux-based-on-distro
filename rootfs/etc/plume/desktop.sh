@@ -54,9 +54,13 @@ MEM_MB=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 ))
 sed -i -E "s/^num_devices=.*/num_devices=1/; s/^size0=[0-9]*/size0=$(( MEM_MB / 2 ))/; s/^algo0=[a-z0-9]*/algo0=zstd/" /etc/conf.d/zram-init
 
 log "Utilisateurs : groupes + fichiers de config par défaut"
+# dossiers personnels habituels (aussi pour les futurs utilisateurs via /etc/skel)
+USER_DIRS="Bureau Documents Téléchargements Images Musique Vidéos"
+for d in $USER_DIRS; do mkdir -p "/etc/skel/$d"; done
 awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: read -r u home; do
 	for g in seat video audio input netdev wheel; do addgroup "$u" "$g" 2>/dev/null || true; done
 	mkdir -p "$home"
+	for d in $USER_DIRS; do mkdir -p "$home/$d"; done
 	# copie /etc/skel sans écraser ce qui existe déjà
 	(cd /etc/skel && find . -type f) | while read -r f; do
 		[ -e "$home/$f" ] && continue
@@ -67,9 +71,9 @@ awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' /etc/passwd | while IFS=: rea
 	echo "  - $u"
 done
 
-log "Compilation de plume-hud (connexion + verrouillage) et plume-shell (barre + dock)"
+log "Compilation de plume-hud (connexion + verrouillage), plume-shell (barre + dock) et plume-term (terminal + poste de pilotage)"
 # outils de compilation installés temporairement, puis supprimés juste après
-BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev"
+BUILD_DEPS="gcc musl-dev make pkgconf wayland-dev wayland-protocols wlr-protocols cairo-dev pango-dev libxkbcommon-dev linux-pam-dev libvterm-dev"
 HUD_OK=0
 # shellcheck disable=SC2086
 if apk add --virtual .plume-build $BUILD_DEPS; then
@@ -83,6 +87,9 @@ if apk add --virtual .plume-build $BUILD_DEPS; then
 	rm -rf /tmp/plume-shell && cp -r "$PLUME/shell" /tmp/plume-shell
 	make -C /tmp/plume-shell && make -C /tmp/plume-shell install PREFIX=/usr/local || true
 	rm -rf /tmp/plume-shell
+	rm -rf /tmp/plume-term && cp -r "$PLUME/term" /tmp/plume-term
+	make -C /tmp/plume-term && make -C /tmp/plume-term install PREFIX=/usr/local || true
+	rm -rf /tmp/plume-term
 	log "Suppression des outils de compilation"
 	apk del .plume-build
 fi
@@ -100,6 +107,8 @@ fi
 
 # lanceur de barre : plume-shell (barre + dock HUD), sinon swaybar
 install -Dm755 "$PLUME/conf/plume-bar" /usr/local/bin/plume-bar
+# lanceur de terminal : plume-term, sinon foot
+install -Dm755 "$PLUME/conf/plume-terminal" /usr/local/bin/plume-terminal
 
 log "Nettoyage"
 rm -rf /var/cache/apk/*

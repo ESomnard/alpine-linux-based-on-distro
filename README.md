@@ -87,7 +87,8 @@ traits cyan lumineux `#4fb8e0`, équerres dans les coins, police **JetBrains Mon
 | Gestionnaire de fenêtres | **sway** (mosaïque, marges, bordures cyan lumineuses) |
 | Barre du haut + dock | **plume-shell** (maison, ~80 Ko) : bureaux, fenêtre active, CPU en graphe, RAM, réseau, son, batterie, heure ; dock avec applis ouvertes et info-bulles |
 | Fond d'écran | **plume-wall** (maison) : grille, anneaux HUD, logo PLUME |
-| Terminal | **foot** |
+| Poste de pilotage | **plume-term --hud** : le terminal en plein écran, entouré des performances (CPU, cœurs, RAM, swap, réseau, disques, processus), d'un explorateur de fichiers avec recherche et d'un clavier à l'écran — `Super + x` ou `◈` dans le dock |
+| Terminal | **plume-term** (maison, ~150 Ko + libvterm ~100 Ko) : terminal HUD avec onglets, historique, copier/coller, couleurs complètes, et mode poste de pilotage — **foot** reste installé en secours (`Super + Maj + Entrée`) |
 | Lanceur d'applications | **fuzzel** |
 | Notifications | **mako** |
 | Écran de connexion | **plume-hud** (HUD maison) lancé par **greetd** dans **cage** |
@@ -134,6 +135,8 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | `plume-hud` intégré : compilé puis outils supprimés, greetd au démarrage, verrouillage depuis sway | ✅ Testé en VM |
 | Thème du bureau (sway, foot, fuzzel, mako, GTK, fond d'écran) | ✅ Testé dans un sway virtuel (`tests/desktop-preview.sh`) |
 | `plume-shell` (barre + dock) | ✅ Testé en VM (barre, dock, son, applis ouvertes) — bureau complet : ~150 Mo de RAM |
+| `plume-term` (terminal) | ✅ Testé en VM (compilé sur la machine, lancé depuis sway) et dans un sway virtuel (`tests/term-preview.sh`) : couleurs 16/256/24 bits, styles, accents et touches mortes, chinois, cadres, htop, historique, onglets, copier/coller, sélection à la souris, zoom |
+| `plume-term --hud` (poste de pilotage) | ✅ Testé en VM (mesures réelles de la machine) et dans un sway virtuel avec souris et clavier virtuels : raccourcis, recherche, ouverture de fichier, « cd ici », fil d'Ariane, fichiers cachés, clavier à l'écran ; ~35 Mo de RAM, ~1 à 2 % d'un cœur au repos |
 | Wifi, veille, luminosité, touches multimédia | ⚪ Codé, à tester sur un vrai PC |
 | Démarrage UEFI | ⚪ À tester |
 | Chiffrement du disque | ⚪ À faire |
@@ -189,11 +192,15 @@ Puis sur un vrai PC : copie l'ISO sur une clé USB → démarre dessus → `sh /
 │   └── README.md                 # détails du HUD
 ├── shell/                        # plume-shell : barre du haut + dock (C, layer-shell)
 │   └── main.c draw.c ipc.c json.c sys.c shell.h Makefile
+├── term/                         # plume-term : terminal HUD + poste de pilotage (Wayland + libvterm)
+│   └── main.c tab.c render.c hud.c sysinfo.c term.h hud.h Makefile
 ├── tests/
 │   ├── vm-test.sh                # test automatique complet (QEMU dans Docker)
 │   ├── vm-test.py                # pilote la VM par la console série (pexpect)
 │   ├── vm-gui.sh                 # VM graphique accessible en VNC
 │   ├── hud-preview.sh            # teste plume-hud dans un sway virtuel (captures)
+│   ├── term-preview.sh           # teste plume-term dans un sway virtuel (captures, mémoire, clics)
+│   ├── vpointer.c                # souris virtuelle pour les tests de clics
 │   ├── desktop-preview.sh        # aperçu du bureau (thème, barre, dock, lanceur)
 │   └── fake-greetd.py            # faux greetd pour tester l'écran de connexion
 └── rootfs/                       # fichiers copiés tels quels dans le système
@@ -363,7 +370,8 @@ Le script :
 4. active les services `dbus`, `seatd`, `zram-init` et `iwd` ;
 5. règle le swap **zram** à la moitié de la RAM ;
 6. ajoute ton utilisateur aux groupes nécessaires (`seat`, `video`, `audio`, `input`…) et copie la config par défaut sans écraser l'existant ;
-7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock) et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
+7. **compile `plume-hud`** (connexion + verrouillage), **`plume-shell`** (barre + dock), **`plume-term`** (terminal + poste de pilotage) et **`plume-wall`** (fond d'écran), puis **supprime les outils de compilation** ;
+   crée aussi les dossiers Bureau, Documents, Téléchargements, Images, Musique, Vidéos ;
 8. active **greetd**, qui affiche le HUD de connexion au démarrage ;
 9. bascule le wifi vers **iwd**, en dernier pour ne pas couper l'installation.
 
@@ -415,7 +423,7 @@ Le script :
 - Supprimer la documentation : `doas apk del $(apk info | grep -- '-doc$')`.
 - Vider le cache : `doas rm -rf /var/cache/apk/*`
 - Démarrage plus rapide : `rc_parallel="YES"` dans `/etc/rc.conf`.
-- Terminaux plus légers : `exec foot --server` dans sway, puis `set $term footclient`.
+- Terminal plus léger : `set $term foot` dans `~/.config/sway/config` (foot : ~11 Mo de RAM, plume-term : ~24 Mo avec 2 onglets).
 
 ---
 
@@ -433,7 +441,9 @@ La touche `Super` est la touche Windows (⌘ sur Mac).
 | Clic sur le réseau | Ouvre `iwctl` (wifi) |
 | Clic sur `AZERTY` | Change de disposition |
 | Dock : clic / clic milieu | Affiche l'appli (ou la lance) / nouvelle fenêtre |
-| `Super + Entrée` | Terminal |
+| `Super + x` | Poste de pilotage : terminal plein écran + système, réseau, fichiers, clavier |
+| `Super + Entrée` | Terminal (plume-term) |
+| `Super + Maj + Entrée` | Terminal de secours (foot) |
 | `Super + d` | Lanceur d'applications |
 | `Super + b` | Firefox |
 | `Super + e` | Gestionnaire de fichiers |
@@ -465,6 +475,48 @@ Le même HUD sert au démarrage (connexion) et au verrouillage :
 - `Tab` passe de l'utilisateur au mot de passe (connexion), `Ctrl + U` efface le champ.
 
 Voir `hud/README.md` pour les détails.
+
+### Terminal (plume-term)
+
+Terminal maison au style HUD, sans Electron : la fenêtre, les onglets, l'historique, la sélection
+et le dessin sont écrits pour Plume ; le décodage des séquences du terminal (couleurs, curseur,
+écran plein comme `htop` ou `micro`) est confié à **libvterm**, la petite bibliothèque utilisée par Neovim.
+
+| Raccourci | Action |
+|---|---|
+| `Ctrl + Maj + T` / `+` dans la barre | Nouvel onglet (dans le même dossier) |
+| `Ctrl + Maj + W` / `✕` / clic milieu sur l'onglet | Fermer l'onglet |
+| `Ctrl + Tab`, `Ctrl + Page↑/↓`, `Alt + 1…9` | Changer d'onglet |
+| `Ctrl + Maj + C` / `Ctrl + Maj + V` | Copier / coller (aussi `Maj + Inser`) |
+| Glisser · double-clic · triple-clic | Sélectionner du texte · un mot · une ligne |
+| Clic droit | Copier la sélection, sinon coller |
+| Clic milieu | Coller la dernière sélection |
+| Molette, `Maj + Page↑/↓`, `Maj + Début/Fin` | Remonter dans l'historique (5 000 lignes par onglet) |
+| `Ctrl + plus` / `Ctrl + moins` / `Ctrl + 0` | Taille du texte |
+| `Maj` + souris | Sélectionner même dans `htop`, `micro`… (qui captent la souris) |
+
+Options : `plume-term -e commande`, `-D dossier`, `-f taille`, `-a app_id`, `-T titre`, `--hud` (voir `plume-term --help`).
+
+### Poste de pilotage (plume-term --hud)
+
+`Super + x`, `◈` dans le dock, ou `Ctrl + Maj + H` dans n'importe quel plume-term : le terminal en
+plein écran à la façon d'eDEX-UI, mais en C natif.
+
+| Panneau | Contenu |
+|---|---|
+| **Centre** | le terminal, avec ses onglets |
+| **SYSTÈME** (gauche) | OS, noyau, temps de marche, batterie ; CPU (graphe + chaque cœur, température, charge) ; mémoire et swap ; processus les plus gourmands |
+| **RÉSEAU** (droite) | interface, IPv4, passerelle, signal wifi, connexions TCP, débit ↓↑ en graphe, totaux ; **STOCKAGE** (`/`, `/home`, clés USB) ; infos du terminal |
+| **FICHIERS** (bas) | explorateur qui **suit le dossier du terminal** : raccourcis (Perso, Bureau, Documents, Téléchargements, Images, Musique, Vidéos, Racine), fil d'Ariane cliquable, tailles (et dates sur grand écran), fichiers cachés ; **recherche** : clic dans le champ (ou `Ctrl + Maj + F`), tape pour filtrer, `Entrée` ouvre, ou va à un chemin tapé (`~/Images`, `/etc`) ; double-clic ouvre (texte → nouvel onglet avec micro, PDF → zathura, image → imv, vidéo/son → mpv) ; **cd ici** envoie le terminal dans le dossier affiché |
+| **CLAVIER** (bas) | ta disposition réelle (AZERTY/QWERTY), les touches s'allument quand tu tapes, dernière touche et compteur de frappes ; cliquer une touche écrit dans le terminal (`⇧` et `CTRL` restent enfoncées pour la touche suivante, ex. `CTRL` puis `C`) |
+
+Quand l'explorateur a le clavier : `↑ ↓` choisir · `Entrée` ouvrir · `⌫` (recherche vide) ou `←`
+dossier parent · `Ctrl + H` fichiers cachés · `Échap` vider la recherche, puis rendre le clavier au
+terminal (un clic dans le terminal le rend aussi).
+
+Volontairement absent par rapport à eDEX-UI : le globe des connexions (il faudrait envoyer les
+adresses IP à un service en ligne ou embarquer une base de plusieurs Mo), les sons et les thèmes.
+Les touches mortes de l'AZERTY marchent (`^` puis `e` = `ê`).
 
 ### Écrire en chinois (pinyin)
 
@@ -534,6 +586,7 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 | Clavier ou souris inactifs sous sway | `doas setup-devd udev`, puis redémarre |
 | Pas de son | `ps \| grep pipewire` ; vérifie `echo $XDG_RUNTIME_DIR` et le groupe `audio` |
 | Écran de connexion noir ou absent | `Ctrl + Alt + F1` pour la connexion texte, puis `doas rc-service greetd restart` ; journal : `doas cat /var/log/messages \| grep -i greet` |
+| Le terminal ne s'ouvre pas | `Super + Maj + Entrée` ouvre foot ; puis `plume-term` dedans pour voir l'erreur |
 | Le verrouillage ne s'affiche pas | `plume-hud --dev` pour tester ; à défaut, sway utilise swaylock automatiquement |
 | Le pinyin ne s'active pas | `ps \| grep ibus-daemon` ; relance avec `ibus-daemon -drx` |
 | Wifi absent | `doas rc-service iwd restart`, puis `iwctl` ; si la carte n'apparaît pas : `doas apk add linux-firmware` |
@@ -547,15 +600,58 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 ## 14. Feuille de route
 
+🔴 urgent · 🟠 important · 🟢 plus tard
+
+### Corrections à faire
+
+| Priorité | Problème | Détails |
+|---|---|---|
+| 🟠 | **plume-hud : le clavier ne répond plus s'il est débranché puis rebranché pendant l'écran de connexion ou de verrouillage** | **Quand ça arrive :** sur un PC avec un clavier USB (ou sans fil avec dongle), si le clavier est débranché puis rebranché, ou se met en veille puis se reconnecte, alors que l'écran de connexion ou de verrouillage est affiché. Un portable n'est pas concerné tant qu'on utilise son clavier intégré, qui ne disparaît jamais.<br>**Ce qu'on voit :** l'écran reste affiché mais les frappes ne font plus rien : impossible de taper son mot de passe, donc de se connecter ou de déverrouiller. La souris peut avoir le même problème.<br>**Pourquoi :** quand le dernier clavier disparaît, le compositeur (sway ou cage) annonce qu'il n'y a « plus de clavier », puis « de nouveau un clavier » au rebranchement. Une appli Wayland doit alors abandonner l'ancien objet clavier, devenu inerte, et en demander un nouveau. plume-hud garde l'ancien et n'en redemande jamais (`seat_caps` dans `hud/main.c`).<br>**Contournement en attendant (non testé) :** relancer plume-hud, car une nouvelle copie récupère le clavier rebranché. `Ctrl + Alt + F2`, se connecter en mode texte, puis : écran de connexion → `doas rc-service greetd restart` ; écran de verrouillage → `pkill plume-hud && WAYLAND_DISPLAY=wayland-1 plume-hud --lock &`, puis revenir sur l'écran de sway (`Ctrl + Alt + F7` avec greetd, `F1` sinon). Attention : tuer plume-hud sans le relancer laisse la session verrouillée sans rien pour taper le mot de passe (c'est voulu, pour la sécurité). En dernier recours : redémarrer (le travail non enregistré est perdu).<br>**Correction :** une dizaine de lignes, comme celle déjà faite dans plume-term : libérer l'ancien clavier ou l'ancienne souris quand ils disparaissent, en redemander un quand ils reviennent. Rien ne change à l'apparence. |
+
+### Stabilité et matériel
+
 | Priorité | Tâche |
 |---|---|
 | 🔴 | Tester sur un vrai PC : wifi, veille, son, luminosité, touches multimédia |
 | 🔴 | Tester le démarrage UEFI |
-| 🟠 | Option de chiffrement du disque dans `install.sh` (`setup-disk -e`) |
 | 🟢 | Installation 100 % automatique (fichier de réponses complet) |
-| 🟢 | Dépôt `.apk` Plume pour mettre à jour les configs avec `apk upgrade` |
 | 🟢 | Gestion du wifi en mode graphique (`iwgtk`) |
-| 🟢 | Identité visuelle : fond d'écran, thème |
+
+### Sécurité et mises à jour
+
+| Priorité | Tâche |
+|---|---|
+| 🟠 | **Sécuriser la distro** : pare-feu activé par défaut (nftables : tout bloquer en entrée sauf ce qui est demandé), chiffrement du disque en option dans `install.sh` (`setup-disk -e`), services réduits au strict nécessaire, réglages noyau durcis (`sysctl`) |
+| 🟠 | **Mises à jour simples** : une commande et un bouton dans la barre pour tout mettre à jour (système, applis Flatpak, outils Plume), avec une notification quand des mises à jour de sécurité sont disponibles |
+| 🟢 | Dépôt `.apk` Plume pour mettre à jour les configs et les outils maison avec `apk upgrade` |
+
+### Applications
+
+| Priorité | Tâche |
+|---|---|
+| 🟠 | **Commandes familières pour les habitués d'Ubuntu/Debian** : `sudo` et `apt install …` qui fonctionnent (traduits vers `doas` et `apk`), pour suivre les tutos trouvés sur Internet sans changer ses habitudes |
+| 🟠 | **Logithèque Plume** : une appli graphique pour installer et désinstaller des logiciels, à la manière de GNOME Logiciels (recherche, catégories, captures, mises à jour), qui gère à la fois les paquets Alpine et Flatpak, au style HUD |
+
+### Jeux vidéo
+
+| Priorité | Tâche |
+|---|---|
+| 🟠 | **Jeux PC** : Steam (via Flatpak, car Steam a besoin de glibc et Alpine utilise musl), Epic Games et GOG via **Heroic Games Launcher** ; jeux GOG installables aussi en local, hors ligne ; pilotes graphiques et Vulkan, manettes |
+| 🟢 | **Émulateurs de consoles** : RetroArch et des émulateurs dédiés (PlayStation, Nintendo…), avec les manettes configurées automatiquement |
+
+### Bureau et apparence
+
+| Priorité | Tâche |
+|---|---|
+| 🟠 | **Changer de fond d'écran** facilement : plusieurs fonds Plume au choix, ou une image perso, depuis une fenêtre de réglages (le fond est aussi utilisé par l'écran de connexion) |
+| 🟢 | **Mode « Windows » avec `Ctrl + 9`** : bascule le bureau vers une disposition familière pour qui vient de Windows (barre des tâches en bas, menu Démarrer, fenêtres flottantes avec boutons fermer/agrandir, raccourcis Windows), puis retour au mode Plume avec le même raccourci. À vérifier : `Ctrl + 9` est déjà utilisé par les navigateurs (aller au dernier onglet) |
+| 🟢 | Identité visuelle : thèmes de couleurs au choix |
+
+### Organisation du projet
+
+| Priorité | Tâche |
+|---|---|
+| 🟢 | **Un dépôt par composant** : séparer `plume-hud` (connexion, verrouillage), `plume-shell` (barre, dock), `plume-term` (terminal, poste de pilotage) et les futurs outils dans des dépôts Git distincts, chacun avec son README et ses versions ; ce dépôt-ci ne garderait que la construction de la distro, qui les assemble |
 
 ### Ressources
 

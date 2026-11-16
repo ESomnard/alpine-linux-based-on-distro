@@ -21,7 +21,7 @@ docker run --rm --platform linux/amd64 \
 	"
 
 # Récupère les captures d'écran transmises en base64 par la console série
-for name in greeter bureau verrou; do
+for name in greeter bureau terminal verrou; do
 	tr -d '\r' < out/test/vm.log | sed -n "/^===B64START $name===\$/,/^===B64END===\$/p" \
 		| sed '1d;$d' | base64 -d > "out/test/$name.png" 2>/dev/null || true
 	[ -s "out/test/$name.png" ] && echo "Capture : out/test/$name.png" || rm -f "out/test/$name.png"

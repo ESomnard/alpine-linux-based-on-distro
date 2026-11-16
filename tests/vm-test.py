@@ -159,7 +159,7 @@ vm.login("test")
 step("Vérifications après redémarrage")
 vm.run("rc-status default | grep -E 'dbus|seatd|iwd|zram'; cat /proc/swaps; id")
 vm.run('df -h / | tail -1; free -m | sed -n 2p; echo "paquets: $(apk info | wc -l)"')
-vm.run('for p in sway foot fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
+vm.run('for p in sway foot plume-term plume-terminal fuzzel swaylock firefox mpv imv zathura pcmanfm micro ibus-daemon; do '
        'command -v $p >/dev/null && echo "OK  $p" || echo "MANQUE $p"; done; '
        'ls /usr/share/ibus/component/; ls /usr/share/fonts')
 
@@ -186,6 +186,11 @@ vm.run('echo "fenetres foot: $(swaymsg -t get_tree | grep -c \'"app_id": "foot"\
        'echo "plume-shell: $(ps | grep -c \'[p]lume-shell\')"; ls -l /usr/local/bin/plume-shell /usr/share/plume/wallpaper.png; free -m | sed -n 2p')
 vm.run("grim /tmp/shot.png && ls -l /tmp/shot.png || tail -30 /tmp/sway.log", 180)
 vm.run("echo ===B64START bureau===; base64 /tmp/shot.png; echo ===B64END===", 900)
+
+step("Poste de pilotage (plume-term --hud)")
+vm.run("plume-term --version; (ls -d ~/Documents ~/Bureau; plume-term --hud -e sh -c 'printf \"\\\\033[1;36mplume-term\\\\033[0m · 你好 · é\\\\n\"; ls --color=always /; exec sh' > /tmp/term.log 2>&1 &) ; sleep 20; "
+       "echo \"fenetres plume-term: $(swaymsg -t get_tree | grep -c '\"app_id\": \"plume-term\"')\"; grim /tmp/term.png && ls -l /tmp/term.png; cat /tmp/term.log; pkill plume-term", 180)
+vm.run("echo ===B64START terminal===; base64 /tmp/term.png; echo ===B64END===", 900)
 
 step("Écran de verrouillage (plume-hud --lock)")
 vm.run("(plume-hud --lock > /tmp/lock.log 2>&1 &) ; sleep 15; grim /tmp/lock.png && ls -l /tmp/lock.png; cat /tmp/lock.log", 180)
