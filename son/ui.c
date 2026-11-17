@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 void son_set_volume(struct node *n, double v);
 void son_toggle_mute(struct node *n);
@@ -117,7 +118,8 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	list_bot = H - STATUS_H;
 	kit_clip(list_top, list_bot);
 	if (A.no_wpctl) {
-		message(cr, W, list_top + 80, "PipeWire (wpctl) est introuvable.", "Installe-le : sudo apk add pipewire wireplumber");
+		message(cr, W, list_top + 80, "PipeWire (wpctl) est introuvable.", access("/var/db/xbps", F_OK) == 0 ?
+			"Installe-le : sudo xbps-install -y pipewire wireplumber" : "Installe-le : sudo apk add pipewire wireplumber");
 	} else if (!A.loaded) {
 		spinner(cr, W / 2, list_top + 80, 12);
 	} else {

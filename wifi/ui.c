@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #define C_BG      0x02060b
 #define C_PANEL   0x07121c
@@ -254,7 +255,8 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	list_bot = H - STATUS_H;
 
 	if (A.no_iwctl) {
-		message(cr, W, y + 60, "Le wifi de Plume passe par iwd.", "Installe-le : sudo apk add iwd && sudo rc-service iwd start");
+		message(cr, W, y + 60, "Le wifi de Plume passe par iwd.", access("/var/db/xbps", F_OK) == 0 ?
+			"Installe-le : sudo xbps-install -y iwd && sudo ln -s /etc/sv/iwd /var/service/" : "Installe-le : sudo apk add iwd && sudo rc-service iwd start");
 	} else if (!A.loaded) {
 		spinner(cr, W / 2, y + 60, 12);
 	} else if (!A.have_dev) {

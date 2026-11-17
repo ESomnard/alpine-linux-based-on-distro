@@ -243,6 +243,8 @@ void launch_item(const struct item *it, int source);
 void install_item(const struct item *it, int source);
 void remove_item(const struct item *it, int source);
 bool item_has_apk(const struct item *it, const char **name);
+bool pm_xbps(void);          /* Plume Void (xbps) plutôt qu'Alpine (apk) */
+const char *pm_distro(void); /* « Void » ou « Alpine » */
 bool item_has_flatpak(const struct item *it, const char **id);
 bool item_installed(const struct item *it, int source);
 void item_title(const struct item *it, char *name, size_t ncap, char *summary, size_t scap);

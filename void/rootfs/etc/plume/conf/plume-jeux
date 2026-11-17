@@ -1,0 +1,95 @@
+#!/bin/sh
+# Plume — pack jeux vidéo : tout ce qu'il faut pour jouer sur PC (Plume Void, glibc).
+#   sudo plume-jeux               jeux PC (Steam, Epic, GOG) + manettes + émulateurs
+#   sudo plume-jeux --pc          seulement Steam, Epic, GOG, pilotes et manettes
+#   sudo plume-jeux --emulateurs  seulement les émulateurs (= sudo plume-emulation --tout)
+#   plume-jeux --liste            affiche ce qui serait installé
+#
+# Steam   : paquet natif Void (dépôts nonfree + multilib 32 bits).
+# Epic/GOG: Heroic Games Launcher (Flathub) ; les installateurs GOG hors ligne (.sh/.exe)
+#           s'ajoutent dans Heroic : « Ajouter un jeu » > « Importer ».
+# Jeux Windows : Proton (Steam) et Wine-GE / Proton-GE (Heroic) sont téléchargés par
+#           ces lanceurs eux-mêmes ; ProtonUp-Qt permet d'en ajouter d'autres.
+set -eu
+
+FLATHUB_PC="com.heroicgameslauncher.hgl net.davidotek.pupgui2"
+# 32 bits : Steam et la plupart des jeux Windows en ont besoin
+PC="steam libgcc-32bit libstdc++-32bit libdrm-32bit libglvnd-32bit mesa-dri-32bit
+vulkan-loader vulkan-loader-32bit mesa-vulkan-intel mesa-vulkan-intel-32bit
+mesa-vulkan-radeon mesa-vulkan-radeon-32bit Vulkan-Tools xorg-server-xwayland
+gamemode MangoHud gamescope flatpak"
+
+liste() {
+	cat <<'L'
+Jeux PC
+  Steam                       boutique Steam + Proton (jeux Windows)
+  Heroic Games Launcher       Epic Games, GOG (et installateurs GOG hors ligne), Amazon
+  ProtonUp-Qt                 versions supplémentaires de Proton-GE / Wine-GE
+  Vulkan, Mesa 32 bits        pilotes graphiques Intel et AMD (NVIDIA : voir plus bas)
+  XWayland                    pour Steam et les jeux X11
+  GameMode, MangoHud          performances au maximum pendant le jeu, compteur d'images
+  gamescope                   mini-écran dédié au jeu (résolution, plein écran forcé)
+Manettes (plume-manette)
+  Xbox, PlayStation (DualShock 4, DualSense), Switch (Pro, Joy-Con), Steam, 8BitDo…
+  USB et Bluetooth, vibrations, gyroscope, pavé tactile, Steam Input
+L
+	echo "Émulateurs (plume-emulation --tout)"
+	plume-emulation --liste 2>/dev/null | sed 's/^/  /' || true
+}
+
+pilote_nvidia() {
+	grep -qs 0x10de /sys/bus/pci/devices/*/vendor || return 0
+	echo
+	echo "!! Carte graphique NVIDIA détectée."
+	echo "   Le pilote libre (nouveau) est lent pour jouer. Pilote NVIDIA officiel :"
+	echo "     sudo xbps-install -S nvidia nvidia-libs-32bit     (cartes récentes, GTX 900 et plus)"
+	echo "     sudo xbps-install -S nvidia470 nvidia470-libs-32bit (GTX 600/700)"
+	echo "   puis redémarre."
+}
+
+pc() {
+	U=${SUDO_USER:-}
+	[ -n "$U" ] || { echo "Lance avec sudo depuis ton compte (pas en root directement)." >&2; exit 1; }
+	echo "==> Pilotes graphiques et outils de jeu"
+	# Steam et les bibliothèques 32 bits sont dans les dépôts nonfree et multilib
+	xbps-install -Sy void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree
+	xbps-install -Sy
+	# shellcheck disable=SC2086
+	xbps-install -y $PC
+	# GameMode : réglages du processeur pour les membres du groupe gamemode
+	grep -q '^gamemode:' /etc/group && usermod -aG gamemode "$U" || true
+
+	echo; echo "==> Manettes"
+	plume-manette --installer
+
+	echo; echo "==> Heroic (Epic, GOG) et ProtonUp-Qt depuis Flathub (pour $U)"
+	su "$U" -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+		flatpak install --user -y --noninteractive flathub $FLATHUB_PC"
+	# Flatpak : accès aux manettes et aux dossiers de jeux
+	su "$U" -c "flatpak override --user --device=all com.heroicgameslauncher.hgl" || true
+	pilote_nvidia
+}
+
+case "${1:-}" in
+--liste) liste; exit 0 ;;
+--pc|--emulateurs|"") ;;
+*) echo "Usage : sudo plume-jeux [--pc | --emulateurs] | plume-jeux --liste" >&2; exit 2 ;;
+esac
+if [ "$(id -u)" -ne 0 ]; then
+	exec sudo "$0" "$@"
+fi
+
+[ "${1:-}" = --emulateurs ] || pc
+[ "${1:-}" = --pc ] || { echo; plume-emulation --tout; }
+
+cat <<'F'
+
+Terminé. Déconnecte-toi puis reconnecte-toi (nouveaux groupes), puis :
+  - Steam, Heroic, émulateurs : dans la grille des applications (Super + a) ;
+  - Steam : Paramètres > Compatibilité > « Activer Steam Play pour tous les titres »
+    pour lancer les jeux Windows avec Proton ;
+  - GOG : connecte-toi dans Heroic, ou importe un installateur GOG téléchargé ;
+  - manette : plume-manette (liste, test, appairage Bluetooth).
+F
+echo "  - un jeu plus fluide : options de lancement Steam « gamemoderun mangohud %command% »."
+exit 0

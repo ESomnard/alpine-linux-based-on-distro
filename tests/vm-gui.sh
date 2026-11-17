@@ -4,33 +4,38 @@
 #
 #   ./tests/vm-gui.sh          démarre le disque installé (créé par `make test`)
 #   ./tests/vm-gui.sh live     démarre l'ISO live (pour tester l'installation toi-même)
+#   PLUME=void ./tests/vm-gui.sh [live]   même chose pour Plume Void (make test-void)
 set -eu
 cd "$(dirname "$0")/.."
 
 MODE="${1:-disk}"
-ISO="$(ls -t out/*.iso 2>/dev/null | head -1)"
+if [ "${PLUME:-alpine}" = void ]; then
+	ISO="$(ls -t out/plume-void-*.iso 2>/dev/null | head -1)" T=out/test-void N=plume-void MT="make test-void" MI="make iso-void"
+else
+	ISO="$(ls -t out/alpine-plume-*.iso 2>/dev/null | head -1)" T=out/test N=plume MT="make test" MI="make iso"
+fi
 mkdir -p out/vm
 
 case "$MODE" in
 	disk)
-		[ -f out/test/disk.qcow2 ] || { echo "Pas de disque installé : lance d'abord 'make test'." >&2; exit 1; }
-		if docker ps --format '{{.Command}}' --no-trunc 2>/dev/null | grep -q 'vm-test.py'; then
+		[ -f $T/disk.qcow2 ] || { echo "Pas de disque installé : lance d'abord '$MT'." >&2; exit 1; }
+		if docker ps --format '{{.Command}}' --no-trunc 2>/dev/null | grep -q 'vm-test'; then
 			echo "Un test (make test) est en train d'installer le disque : attends qu'il soit fini." >&2
 			exit 1
 		fi
-		if ! grep -q 'SUCCES' out/test/vm.log 2>/dev/null; then
-			echo "Le dernier test n'a pas réussi : le disque est peut-être incomplet. Relance 'make test'." >&2
+		if ! grep -q 'SUCCES' $T/vm.log 2>/dev/null; then
+			echo "Le dernier test n'a pas réussi : le disque est peut-être incomplet. Relance '$MT'." >&2
 			exit 1
 		fi
 		# copie de travail : le disque du test reste intact
-		[ -f out/vm/plume.qcow2 ] || cp out/test/disk.qcow2 out/vm/plume.qcow2
-		BOOT="-drive file=/o/vm/plume.qcow2,if=virtio"
+		[ -f out/vm/$N.qcow2 ] || cp $T/disk.qcow2 out/vm/$N.qcow2
+		BOOT="-drive file=/o/vm/$N.qcow2,if=virtio"
 		;;
 	live)
-		[ -n "$ISO" ] || { echo "Aucune ISO : lance 'make iso'." >&2; exit 1; }
-		[ -f out/vm/live-disk.qcow2 ] || docker run --rm -v "$PWD/out":/o alpine:latest \
-			sh -c "apk add -q qemu-img >/dev/null && qemu-img create -q -f qcow2 /o/vm/live-disk.qcow2 8G"
-		BOOT="-cdrom /o/$(basename "$ISO") -boot once=d -drive file=/o/vm/live-disk.qcow2,if=virtio"
+		[ -n "$ISO" ] || { echo "Aucune ISO : lance '$MI'." >&2; exit 1; }
+		[ -f out/vm/live-disk-$N.qcow2 ] || docker run --rm -v "$PWD/out":/o alpine:latest \
+			sh -c "apk add -q qemu-img >/dev/null && qemu-img create -q -f qcow2 /o/vm/live-disk-$N.qcow2 8G"
+		BOOT="-cdrom /o/$(basename "$ISO") -boot once=d -drive file=/o/vm/live-disk-$N.qcow2,if=virtio"
 		;;
 	*) echo "usage: $0 [disk|live]" >&2; exit 1 ;;
 esac

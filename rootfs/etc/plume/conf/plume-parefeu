@@ -8,6 +8,19 @@
 set -eu
 PORTS=/etc/nftables.d/plume-ports.nft
 
+# service « nftables » : runit sur Plume Void, OpenRC sur Plume Alpine
+if [ -d /var/db/xbps ]; then
+	svc_actif() { sv status nftables 2>/dev/null | grep -q '^run:'; }
+	svc_stop() { sv down nftables >/dev/null 2>&1; rm -f /var/service/nftables; }
+	svc_start() { ln -sf /etc/sv/nftables /var/service/nftables; sleep 1; sv up nftables >/dev/null 2>&1; }
+	svc_reload() { nft -f /etc/nftables.nft; }
+else
+	svc_actif() { rc-service nftables status >/dev/null 2>&1; }
+	svc_stop() { rc-service nftables stop >/dev/null 2>&1 || true; rc-update del nftables default >/dev/null 2>&1; }
+	svc_start() { rc-update add nftables default >/dev/null 2>&1 || true; rc-service nftables start >/dev/null 2>&1; }
+	svc_reload() { rc-service nftables reload >/dev/null 2>&1 || rc-service nftables restart >/dev/null 2>&1 || nft -f /etc/nftables.nft; }
+fi
+
 root() { [ "$(id -u)" -eq 0 ] || { echo "À lancer avec sudo : sudo plume-parefeu $*" >&2; exit 1; }; }
 
 # « 22 », « 8080/tcp », « 1714-1764/udp » -> « tcp 22 »
@@ -23,14 +36,14 @@ port_arg() {
 
 recharger() {
 	nft -c -f /etc/nftables.nft || { echo "Règles invalides, rien n'a été changé." >&2; return 1; }
-	rc-service nftables reload >/dev/null 2>&1 || rc-service nftables restart >/dev/null 2>&1 || nft -f /etc/nftables.nft
+	svc_reload
 }
 
 case "${1:-statut}" in
 statut)
 	if [ "$(id -u)" -eq 0 ] && nft list chain inet filter input >/dev/null 2>&1; then
 		echo "Pare-feu : ACTIF (tout ce qui entre est bloqué, sauf les réponses)"
-	elif rc-service nftables status >/dev/null 2>&1; then
+	elif svc_actif; then
 		echo "Pare-feu : ACTIF (tout ce qui entre est bloqué, sauf les réponses)"
 	else
 		echo "Pare-feu : INACTIF   (sudo plume-parefeu activer)"
@@ -63,15 +76,13 @@ fermer)
 	;;
 desactiver)
 	root "$@"
-	rc-service nftables stop >/dev/null 2>&1 || true
+	svc_stop || true
 	nft flush ruleset 2>/dev/null || true
-	rc-update del nftables default >/dev/null 2>&1 || true
 	echo "Pare-feu désactivé (même après redémarrage). Pour le remettre : sudo plume-parefeu activer"
 	;;
 activer)
 	root "$@"
-	rc-update add nftables default >/dev/null 2>&1 || true
-	rc-service nftables start >/dev/null 2>&1 || recharger
+	svc_start || recharger
 	echo "Pare-feu activé."
 	;;
 -h|--help|aide)

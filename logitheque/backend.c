@@ -51,10 +51,33 @@ static bool in_path(const char *prog)
 	return false;
 }
 
-/* « nom-1.2.3-r0 » -> nom + version */
+/* gestionnaire de paquets : xbps (Plume Void, glibc) ou apk (Plume Alpine, musl) */
+bool pm_xbps(void)
+{
+	static int x = -1;
+	if (x < 0)
+		x = access("/var/db/xbps", F_OK) == 0 || getenv("PLUME_XBPS") != NULL;
+	return x;
+}
+
+const char *pm_distro(void) { return pm_xbps() ? "Void" : "Alpine"; }
+
+/* « nom-1.2.3-r0 » (apk) ou « nom-1.2.3_1 » (xbps) -> nom + version */
 static void split_nv(const char *nv, char *name, size_t ncap, char *ver, size_t vcap)
 {
 	size_t n = strlen(nv);
+	if (pm_xbps()) {
+		/* xbps : la version est après le dernier « - » (elle n'en contient jamais) */
+		const char *d = strrchr(nv, '-');
+		if (!d) {
+			snprintf(name, ncap, "%s", nv);
+			if (vcap) ver[0] = '\0';
+		} else {
+			snprintf(name, ncap, "%.*s", (int)(d - nv), nv);
+			if (vcap) snprintf(ver, vcap, "%s", d + 1);
+		}
+		return;
+	}
 	/* cherche « -r<chiffres> » à la fin, puis le « - » qui précède la version */
 	const char *r = NULL;
 	for (const char *p = nv + n; p > nv; p--)
@@ -152,10 +175,24 @@ static void index_done(struct proc *p, int status)
 	free_index();
 	int cap = 0;
 	for (char *line = strtok(p->out, "\n"); line; line = strtok(NULL, "\n")) {
-		char *sep = strstr(line, " - ");
-		if (!sep)
-			continue;
-		*sep = '\0';
+		char *sep, *desc;
+		if (pm_xbps()) {
+			/* « [-] nom-1.0_1      description » */
+			if (strlen(line) < 5 || line[0] != '[')
+				continue;
+			line += 4;
+			sep = strchr(line, ' ');
+			if (!sep)
+				continue;
+			*sep = '\0';
+			desc = trim(sep + 1);
+		} else {
+			sep = strstr(line, " - ");
+			if (!sep)
+				continue;
+			*sep = '\0';
+			desc = sep + 3;
+		}
 		char name[128], ver[64];
 		split_nv(line, name, sizeof name, ver, sizeof ver);
 		if (A.npkgs == cap) {
@@ -168,7 +205,7 @@ static void index_done(struct proc *p, int status)
 		struct pkg *k = &A.pkgs[A.npkgs++];
 		k->name = strdup(name);
 		k->version = strdup(ver);
-		k->desc = strdup(sep + 3);
+		k->desc = strdup(desc);
 	}
 	qsort(A.pkgs, A.npkgs, sizeof *A.pkgs, cmp_pkg);
 	A.index_ready = true;
@@ -178,7 +215,8 @@ static void index_done(struct proc *p, int status)
 static void load_index(void)
 {
 	char *argv[] = { "apk", "search", "-v", NULL };
-	proc_run(argv, NULL, index_done, Q_INDEX, false);
+	char *xargv[] = { "xbps-query", "-Rs", "", NULL };
+	proc_run(pm_xbps() ? xargv : argv, NULL, index_done, Q_INDEX, false);
 }
 
 const struct pkg *pkg_find(const char *name)
@@ -217,6 +255,32 @@ void load_installed(void)
 	free_list(&A.installed, &A.ninstalled);
 	free_list(&A.world, &A.nworld);
 	int cap = 0;
+	if (pm_xbps()) {
+		/* « ii nom-1.0_1  description » ; demandés à la main : xbps-query -m */
+		char line[512], name[160];
+		FILE *q = popen("xbps-query -l 2>/dev/null", "r");
+		while (q && fgets(line, sizeof line, q)) {
+			char nv[200];
+			if (sscanf(line, "%*s %199s", nv) == 1) {
+				split_nv(nv, name, sizeof name, NULL, 0);
+				push(&A.installed, &A.ninstalled, &cap, name);
+			}
+		}
+		if (q)
+			pclose(q);
+		qsort(A.installed, A.ninstalled, sizeof *A.installed, cmp_str);
+		cap = 0;
+		q = popen("xbps-query -m 2>/dev/null", "r");
+		while (q && fgets(line, sizeof line, q)) {
+			split_nv(trim(line), name, sizeof name, NULL, 0);
+			if (*name)
+				push(&A.world, &A.nworld, &cap, name);
+		}
+		if (q)
+			pclose(q);
+		qsort(A.world, A.nworld, sizeof *A.world, cmp_str);
+		return;
+	}
 	FILE *f = fopen("/lib/apk/db/installed", "r");
 	if (f) {
 		char line[512];
@@ -435,6 +499,16 @@ static void apk_version_done(struct proc *p, int status)
 	A.nupdates = k;
 	for (char *line = strtok(p->out, "\n"); line && A.nupdates < 256; line = strtok(NULL, "\n")) {
 		char nv[160], op[8], to[64];
+		if (pm_xbps()) {
+			/* « nom-2.0_1 update x86_64 dépôt … » (version installée : non donnée) */
+			if (sscanf(line, "%159s %7s", nv, op) != 2 || strcmp(op, "update"))
+				continue;
+			struct update_row *u = &A.updates[A.nupdates++];
+			u->kind = K_APK;
+			split_nv(nv, u->name, sizeof u->name, u->to, sizeof u->to);
+			u->from[0] = '\0';
+			continue;
+		}
 		if (sscanf(line, "%159s %7s %63s", nv, op, to) != 3 || strcmp(op, "<"))
 			continue;
 		struct update_row *u = &A.updates[A.nupdates++];
@@ -470,7 +544,8 @@ static void list_updates(void)
 {
 	A.nupdates = 0;
 	char *a[] = { "apk", "version", "-l", "<", NULL };
-	proc_run(a, NULL, apk_version_done, Q_APK_VERSION, false);
+	char *xa[] = { "xbps-install", "-un", NULL };
+	proc_run(pm_xbps() ? xa : a, NULL, apk_version_done, Q_APK_VERSION, false);
 	if (A.flathub_ready) {
 		char *f[] = { "flatpak", "remote-ls", "--updates", "--app", "--columns=application,version", NULL };
 		proc_run(f, NULL, fp_updates_done, Q_FP_UPDATES, false);
@@ -586,12 +661,22 @@ static void start_job(struct job *j)
 	char *cmd[16] = { 0 };
 	int n = 0;
 	char *remote_url = (char *)FLATHUB_URL;
+	bool x = pm_xbps();
 	switch (j->kind) {
-	case J_APK_ADD: cmd[n++] = "apk"; cmd[n++] = "add"; cmd[n++] = j->arg; break;
-	case J_APK_DEL: cmd[n++] = "apk"; cmd[n++] = "del"; cmd[n++] = j->arg; break;
-	case J_ENABLE_FLATPAK: cmd[n++] = "apk"; cmd[n++] = "add"; cmd[n++] = "flatpak"; break;
-	case J_APK_UPDATE: cmd[n++] = "apk"; cmd[n++] = "update"; break;
-	case J_APK_UPGRADE: cmd[n++] = "apk"; cmd[n++] = "upgrade"; cmd[n++] = "-U"; break;
+	case J_APK_ADD:
+		if (x) { cmd[n++] = "xbps-install"; cmd[n++] = "-y"; cmd[n++] = j->arg; break; }
+		cmd[n++] = "apk"; cmd[n++] = "add"; cmd[n++] = j->arg; break;
+	case J_APK_DEL:
+		if (x) { cmd[n++] = "xbps-remove"; cmd[n++] = "-Ry"; cmd[n++] = j->arg; break; }
+		cmd[n++] = "apk"; cmd[n++] = "del"; cmd[n++] = j->arg; break;
+	case J_ENABLE_FLATPAK:
+		cmd[n++] = x ? "xbps-install" : "apk"; cmd[n++] = x ? "-y" : "add"; cmd[n++] = "flatpak"; break;
+	case J_APK_UPDATE:
+		if (x) { cmd[n++] = "xbps-install"; cmd[n++] = "-S"; break; }
+		cmd[n++] = "apk"; cmd[n++] = "update"; break;
+	case J_APK_UPGRADE:
+		if (x) { cmd[n++] = "xbps-install"; cmd[n++] = "-Syu"; break; }
+		cmd[n++] = "apk"; cmd[n++] = "upgrade"; cmd[n++] = "-U"; break;
 	case J_FP_INSTALL:
 		cmd[n++] = "flatpak"; cmd[n++] = "install"; cmd[n++] = "--user"; cmd[n++] = "-y";
 		cmd[n++] = "--noninteractive"; cmd[n++] = "flathub"; cmd[n++] = j->arg; break;

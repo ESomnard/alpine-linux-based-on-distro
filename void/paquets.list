@@ -1,0 +1,25 @@
+# Plume Linux (Void, glibc) — paquets du système live ET installé.
+# Mêmes rôles que la version Alpine (rootfs/etc/plume/packages/*.list).
+# --- Socle ---
+sudo opendoas dbus seatd iwd openresolv dhcpcd chrony wget curl
+zramen              # swap compressé en RAM
+brightnessctl
+cryptsetup grub grub-x86_64-efi efibootmgr dosfstools e2fsprogs gptfdisk   # installateur (LUKS2, BIOS + UEFI)
+# --- Bureau Wayland ---
+sway swaybg swayidle swaylock
+greetd cage         # écran de connexion : greetd lance plume-hud dans cage
+foot libvterm fuzzel librsvg gdk-pixbuf
+mako libnotify
+nftables            # pare-feu (plume-parefeu)
+apparmor            # confinement des programmes
+grim slurp wl-clipboard
+mesa-dri mesa-vaapi intel-media-driver
+dejavu-fonts-ttf wqy-microhei fastfetch
+ibus ibus-libpinyin # chinois pinyin
+pipewire wireplumber alsa-pipewire
+bluez
+xdg-utils
+# --- Applications du quotidien ---
+firefox firefox-i18n-fr mpv imv zathura zathura-pdf-mupdf pcmanfm micro
+# --- Plume (dépôt .xbps Plume) ---
+plume-bureau

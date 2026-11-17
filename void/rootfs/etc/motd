@@ -1,0 +1,4 @@
+  Bienvenue sur Plume Linux (basée sur Void Linux, glibc)
+
+  Installation sur disque :      sudo sh /etc/plume/install.sh
+  Mises à jour :                 plume-maj

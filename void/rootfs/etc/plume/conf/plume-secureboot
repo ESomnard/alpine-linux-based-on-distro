@@ -1,0 +1,141 @@
+#!/bin/sh
+# Plume (Void) — démarrage sécurisé UEFI (Secure Boot) avec TES propres clés.
+#   plume-secureboot                 état (UEFI ? Secure Boot ? mode configuration ?)
+#   sudo plume-secureboot activer    crée tes clés, les inscrit dans le firmware,
+#                                    signe le noyau, ajoute l'entrée de démarrage
+#   sudo plume-secureboot preparer   tout sauf l'inscription des clés (firmware pas
+#                                    en mode configuration)
+#
+# Principe : le noyau, son initramfs et sa ligne de démarrage sont réunis en une
+# seule image UEFI (UKI, faite par dracut), signée avec ta clé. Le firmware ne
+# démarre que ce que tu as signé. À chaque mise à jour du noyau, l'image est
+# refaite et signée toute seule (/etc/kernel.d/post-install/90-plume-secureboot).
+# Les clés Microsoft sont gardées (-m) : cartes graphiques et Windows continuent
+# de fonctionner.
+set -eu
+
+HOOK=/etc/kernel.d/post-install/90-plume-secureboot
+CMDLINE=/etc/kernel/cmdline
+LSM="lsm=landlock,lockdown,yama,loadpin,safesetid,integrity,apparmor"
+STUB=/usr/lib/systemd/boot/efi/linuxx64.efi.stub
+
+uefi() { [ -n "${PLUME_SB_TEST:-}" ] || [ -d /sys/firmware/efi ]; }
+sb_on() {
+	f=$(ls /sys/firmware/efi/efivars/SecureBoot-* 2>/dev/null | head -1)
+	[ -n "$f" ] && [ "$(od -An -t u1 -j4 -N1 "$f" 2>/dev/null | tr -d ' ')" = 1 ]
+}
+setup_mode() {
+	f=$(ls /sys/firmware/efi/efivars/SetupMode-* 2>/dev/null | head -1)
+	[ -n "$f" ] && [ "$(od -An -t u1 -j4 -N1 "$f" 2>/dev/null | tr -d ' ')" = 1 ]
+}
+# partition système EFI (vfat montée sous /boot)
+esp() { awk '$3 == "vfat" && $2 ~ "^/boot" {print $2; exit}' /proc/mounts; }
+esp_dev() { awk -v m="$1" '$2 == m {print $1; exit}' /proc/mounts; }
+
+statut() {
+	if ! uefi; then
+		echo "Démarrage : BIOS (ancien mode) — Secure Boot n'existe qu'en UEFI."
+		return 0
+	fi
+	echo "Démarrage : UEFI"
+	sb_on && echo "Secure Boot : ACTIF" || echo "Secure Boot : inactif"
+	setup_mode && echo "Firmware : en mode configuration (prêt à recevoir tes clés)" \
+		|| echo "Firmware : clés déjà en place (mode utilisateur)"
+	[ -n "$(esp)" ] && echo "Partition EFI : $(esp)" || echo "Partition EFI : introuvable"
+	if [ -x "$HOOK" ]; then
+		echo "Noyau signé automatiquement à chaque mise à jour : oui"
+	else
+		echo "Noyau signé automatiquement : non (sudo plume-secureboot activer)"
+	fi
+}
+
+root() { [ "$(id -u)" -eq 0 ] || { echo "À lancer avec sudo : sudo plume-secureboot $1" >&2; exit 1; }; }
+
+preparer() {
+	E=$(esp)
+	[ -n "$E" ] || { echo "Partition EFI introuvable (montée sous /boot ?)." >&2; exit 1; }
+	echo "==> Outils : sbctl, dracut-uefi, systemd-boot-efistub, sbsigntool, efibootmgr"
+	xbps-install -Sy sbctl dracut-uefi systemd-boot-efistub sbsigntool efibootmgr >/dev/null
+	echo "==> Tes clés Secure Boot (gardées dans /var/lib/sbctl, à ne jamais partager)"
+	[ -f /var/lib/sbctl/keys/db/db.key ] || sbctl create-keys
+	KEY=/var/lib/sbctl/keys/db/db.key
+	CERT=/var/lib/sbctl/keys/db/db.pem
+	[ -f "$KEY" ] && [ -f "$CERT" ] || { echo "Clés introuvables après sbctl create-keys." >&2; exit 1; }
+
+	echo "==> Ligne de démarrage embarquée dans l'image signée ($CMDLINE)"
+	mkdir -p /etc/kernel
+	tr ' ' '\n' < /proc/cmdline | grep -v -e '^BOOT_IMAGE=' -e '^initrd=' -e '^$' | tr '\n' ' ' > "$CMDLINE"
+	grep -q 'lsm=' "$CMDLINE" || printf '%s ' "$LSM" >> "$CMDLINE"
+	echo >> "$CMDLINE"
+	cat "$CMDLINE"
+
+	# crochet du noyau : appelé par xbps après chaque installation de noyau
+	mkdir -p "$(dirname "$HOOK")"
+	cat > "$HOOK" <<HOOK_EOF
+#!/bin/sh
+# Plume : image UEFI signée, refaite à chaque mise à jour du noyau (\$2 = version)
+VER="\$2"
+OUT="$E/EFI/Plume"
+mkdir -p "\$OUT"
+[ -f "\$OUT/plume.efi" ] && cp "\$OUT/plume.efi" "\$OUT/plume-ancien.efi"
+dracut -q --force --uefi --uefi-stub $STUB --kernel-cmdline "\$(cat $CMDLINE)" \\
+	--kver "\$VER" "\$OUT/plume.efi.tmp" || exit 1
+sbsign --key $KEY --cert $CERT --output "\$OUT/plume.efi" "\$OUT/plume.efi.tmp" && rm -f "\$OUT/plume.efi.tmp"
+HOOK_EOF
+	chmod 755 "$HOOK"
+
+	echo "==> Création et signature de l'image du noyau"
+	VER=$(ls /lib/modules 2>/dev/null | sort -V | tail -1)
+	[ -n "$VER" ] || { echo "Aucun noyau dans /lib/modules." >&2; exit 1; }
+	"$HOOK" linux "$VER"
+	IMG="$E/EFI/Plume/plume.efi"
+	if sbverify --cert "$CERT" "$IMG" >/dev/null 2>&1; then
+		echo "    signé avec ta clé : $IMG"
+	else
+		echo "ERREUR : $IMG n'est pas signé correctement." >&2
+		exit 1
+	fi
+	DEV=$(esp_dev "$E")
+	DISK=$(echo "$DEV" | sed -E 's/p?[0-9]+$//')
+	PART=$(echo "$DEV" | sed -E 's/.*[^0-9]([0-9]+)$/\1/')
+	if [ -z "${PLUME_SB_TEST:-}" ] && ! efibootmgr 2>/dev/null | grep -q "Plume Secure Boot"; then
+		efibootmgr -q -c -d "$DISK" -p "$PART" -L "Plume Secure Boot" \
+			-l '\EFI\Plume\plume.efi' && echo "    entrée de démarrage ajoutée (en premier)"
+	fi
+}
+
+case "${1:-statut}" in
+statut) statut ;;
+preparer)
+	root preparer
+	uefi || { statut; exit 1; }
+	preparer
+	echo
+	echo "Prêt. Il reste à inscrire tes clés : mets le firmware en « mode configuration »"
+	echo "(menu Secure Boot : « Reset to Setup Mode » / « Clear keys »), puis :"
+	echo "    sudo plume-secureboot activer"
+	;;
+activer)
+	root activer
+	uefi || { statut; exit 1; }
+	if ! setup_mode; then
+		cat <<'INFO'
+Le firmware n'est pas en « mode configuration » : il refuse de nouvelles clés.
+  1. redémarre et entre dans le firmware (souvent F2, Suppr ou F10 au démarrage) ;
+  2. menu Secure Boot : « Reset to Setup Mode » (ou « Clear Secure Boot keys ») ;
+  3. reviens dans Plume et relance : sudo plume-secureboot activer
+(« sudo plume-secureboot preparer » fait déjà tout le reste.)
+INFO
+		exit 1
+	fi
+	preparer
+	echo "==> Inscription de tes clés dans le firmware (+ clés Microsoft, pour les cartes graphiques et Windows)"
+	sbctl enroll-keys -m
+	echo
+	echo "Terminé. Redémarre, entre dans le firmware et ACTIVE Secure Boot."
+	echo "Plume démarrera sur « Plume Secure Boot ». Vérifier ensuite : plume-secureboot"
+	echo "En cas de souci : désactive Secure Boot dans le firmware, Plume redémarre comme avant."
+	;;
+-h|--help|aide) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
+*) echo "Commande inconnue : $1 (plume-secureboot aide)" >&2; exit 1 ;;
+esac

@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 void bt_connect(struct dev *d);
 void bt_disconnect(struct dev *d);
@@ -132,11 +133,13 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	kit_clip(list_top, list_bot);
 	if (A.no_ctl)
 		message(cr, W, list_top + 80, "bluez (bluetoothctl) est introuvable.",
+			access("/var/db/xbps", F_OK) == 0 ? "Installe-le : sudo xbps-install -y bluez && sudo ln -s /etc/sv/bluetoothd /var/service/" :
 			"Installe-le : sudo apk add bluez && sudo rc-update add bluetooth && sudo rc-service bluetooth start");
 	else if (!A.loaded)
 		spinner(cr, W / 2, list_top + 80, 12);
 	else if (A.no_adapter)
 		message(cr, W, list_top + 80, "Pas d'adaptateur Bluetooth.",
+			access("/var/db/xbps", F_OK) == 0 ? "Ou le service est arrêté : sudo sv up bluetoothd" :
 			"Ou le service est arrêté : sudo rc-service bluetooth start");
 	else if (!A.powered)
 		message(cr, W, list_top + 80, "Le Bluetooth est désactivé.",

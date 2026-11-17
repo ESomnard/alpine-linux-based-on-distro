@@ -280,10 +280,12 @@ static void load_protected(void)
 		return;
 	done = true;
 	/* socle d'Alpine + listes de Plume (core et bureau) */
-	snprintf(protected_pkgs, sizeof protected_pkgs,
+	snprintf(protected_pkgs, sizeof protected_pkgs, "%s", pm_xbps() ?
+		 " base-system sudo opendoas glibc xbps linux linux-firmware runit-void dracut grub " :
 		 " alpine-base sudo doas busybox musl apk-tools linux-lts linux-firmware openrc ");
-	/* tout ce dont dépend le socle d'Alpine (selon apk lui-même) */
-	FILE *dep = popen("apk info -R alpine-base 2>/dev/null", "r");
+	/* tout ce dont dépend le socle (selon le gestionnaire de paquets lui-même) */
+	FILE *dep = popen(pm_xbps() ? "xbps-query -Rx base-system 2>/dev/null" :
+				      "apk info -R alpine-base 2>/dev/null", "r");
 	char dl[256];
 	while (dep && fgets(dl, sizeof dl, dep)) {
 		if (strchr(dl, ':'))
@@ -320,7 +322,8 @@ static bool is_protected(const char *name)
 	char k[160];
 	snprintf(k, sizeof k, " %s ", name);
 	static const char *prefixes[] = { "linux-", "alpine-", "apk-", "musl", "busybox", "openrc", "ca-certificates",
-					  "libc-", "ifupdown", "mdev", "sudo", "doas", "greetd", "seatd", "eudev" };
+					  "libc-", "ifupdown", "mdev", "sudo", "doas", "greetd", "seatd", "eudev",
+					  "base-", "xbps", "runit", "glibc", "void-", "opendoas", "plume-" };
 	for (size_t i = 0; i < sizeof prefixes / sizeof prefixes[0]; i++)
 		if (!strncmp(name, prefixes[i], strlen(prefixes[i])))
 			return true;
@@ -583,7 +586,7 @@ static double view_detail(cairo_t *cr, double x, double y, double w)
 	if (has_apk && has_fp) {
 		txt(cr, 12, PANGO_WEIGHT_SEMIBOLD, 0.2, C_LINEDIM, 1, x, y + 15, 0, 0, "SOURCE");
 		struct rect a = { x + 90, y, 230, 30 }, b = { x + 330, y, 250, 30 };
-		const char *la = "Alpine · léger", *lb = "Flathub · isolé, plus lourd";
+		const char *la = pm_xbps() ? "Void · léger" : "Alpine · léger", *lb = "Flathub · isolé, plus lourd";
 		for (int s = 0; s < 2; s++) {
 			struct rect r = s ? b : a;
 			bool on = src == s, hov = hover(r);
@@ -635,7 +638,10 @@ static double view_detail(cairo_t *cr, double x, double y, double w)
 			snprintf(detail_size_for, sizeof detail_size_for, "%s", apk);
 			detail_size[0] = '\0';
 			char cmd[200];
-			snprintf(cmd, sizeof cmd, "apk info -s '%s' 2>/dev/null", apk);
+			if (pm_xbps())
+				snprintf(cmd, sizeof cmd, "xbps-query -R -p installed_size '%s' 2>/dev/null", apk);
+			else
+				snprintf(cmd, sizeof cmd, "apk info -s '%s' 2>/dev/null", apk);
 			FILE *f = popen(cmd, "r");
 			char line[200];
 			while (f && fgets(line, sizeof line, f))
@@ -653,7 +659,7 @@ static double view_detail(cairo_t *cr, double x, double y, double w)
 	}
 	struct kvrow { const char *k; const char *v; } rows[6];
 	int nr = 0;
-	rows[nr++] = (struct kvrow){ "SOURCE", src == 0 ? "Paquet Alpine (apk)" : "Flathub (Flatpak)" };
+	rows[nr++] = (struct kvrow){ "SOURCE", src == 0 ? (pm_xbps() ? "Paquet Void (xbps)" : "Paquet Alpine (apk)") : "Flathub (Flatpak)" };
 	rows[nr++] = (struct kvrow){ src == 0 ? "PAQUET" : "IDENTIFIANT", key ? key : "—" };
 	rows[nr++] = (struct kvrow){ "VERSION", ver };
 	if (src == 0)
@@ -727,7 +733,7 @@ static double view_installed(cairo_t *cr, double x, double y, double w)
 			if (!item_installed(&it, s))
 				continue;
 			char sub[200];
-			snprintf(sub, sizeof sub, "%s · %s", s ? "Flathub" : "Alpine", e->summary);
+			snprintf(sub, sizeof sub, "%s · %s", s ? "Flathub" : pm_distro(), e->summary);
 			bool plume = s == 0 && is_protected(e->apk), dep = s == 0 && !apk_in_world(e->apk);
 			y += installed_row(cr, x, y, w, e->name, sub, &it, s, !plume && !dep, plume ? "PLUME" : "DÉPENDANCE", true);
 		}
@@ -946,8 +952,8 @@ static void status_bar(cairo_t *cr, int W, int H)
 		return;
 	}
 	char info[200];
-	snprintf(info, sizeof info, "%d applications au catalogue · %d paquets Alpine · Flathub %s",
-		 A.ncatalog, A.npkgs, A.flathub_ready ? "activé" : A.flatpak_present ? "non configuré" : "non installé");
+	snprintf(info, sizeof info, "%d applications au catalogue · %d paquets %s · Flathub %s",
+		 A.ncatalog, A.npkgs, pm_distro(), A.flathub_ready ? "activé" : A.flatpak_present ? "non configuré" : "non installé");
 	txt(cr, 12, PANGO_WEIGHT_NORMAL, 0.02, C_MUTED, 1, x, cy, 0, W - 2 * MARGIN, info);
 	if (A.njobs)
 		txt(cr, 12, PANGO_WEIGHT_NORMAL, 0.02, C_WARN, 1, W - MARGIN, cy, 2, 0, "tâches en attente");

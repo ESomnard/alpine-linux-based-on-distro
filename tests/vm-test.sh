@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-ISO="$(ls -t out/*.iso 2>/dev/null | head -1)"
+ISO="$(ls -t out/alpine-plume-*.iso 2>/dev/null | head -1)"
 [ -n "$ISO" ] || { echo "Aucune ISO dans out/ — lance d'abord 'make iso'." >&2; exit 1; }
 rm -rf out/test && mkdir -p out/test
 

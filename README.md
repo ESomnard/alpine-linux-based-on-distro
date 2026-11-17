@@ -1,7 +1,7 @@
 # Plume Linux 🪶
 
-> Une distribution Linux **la plus légère possible**, basée sur **Alpine Linux**,
-> mais **complète pour un usage quotidien**.
+> Une distribution Linux **la plus légère possible**, mais **complète pour un usage quotidien**.
+> Deux versions, le même bureau : **Plume Alpine** (musl) et **Plume Void** (glibc).
 
 ---
 
@@ -158,6 +158,62 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Wifi, veille, luminosité, touches multimédia | ⚪ Codé, à tester sur un vrai PC |
 | Démarrage UEFI | ⚪ À tester |
 | Chiffrement du disque | ⚪ À faire |
+
+### Plume Void (glibc)
+
+| Partie | État |
+|---|---|
+| Dépôt `.xbps` Plume signé (`make depot-void`) | ✅ 12 paquets compilés sous glibc (les 11 d'Alpine + la police JetBrains Mono, absente de Void) |
+| ISO live (`make iso-void`) | ✅ 1,6 Go, bureau inclus |
+| Démarrage du live (BIOS), utilisateur `plume` avec les groupes du bureau | ✅ Testé en VM |
+| Installation automatique (`install.sh --auto`) : partitions BIOS + UEFI, copie du live, dracut, GRUB | ✅ Testé en VM (bugs trouvés et corrigés : fuseau horaire, partition BIOS non reconnue par GRUB → `sgdisk`) |
+| Démarrage du système installé (BIOS), connexion, glibc | ✅ Testé en VM |
+| Services runit : dbus, seatd, greetd, nftables, iwd, bluetoothd, zramen | ✅ Testé en VM |
+| Écran de connexion `plume-hud` (greetd + cage) | ✅ Testé en VM (capture d'écran) |
+| Pare-feu, AppArmor, sysctl | ✅ Testé en VM |
+| `plume-maj --verifier` sans mot de passe, `apt` → xbps, `plume-parefeu`, Logithèque, police, Internet | ✅ Testé en VM |
+| Disque chiffré LUKS2 | ✅ Testé en VM (phrase demandée au démarrage, racine chiffrée, toutes les vérifications OK) |
+| Session sway ouverte (barre, dock, son, pinyin) | 🟡 Mêmes composants qu'Alpine, pas encore vus en VM sous Void |
+| `plume-secureboot` (UKI dracut signée), pack émulation | 🟡 Codés, pas testés |
+| Pack jeux (`plume-jeux`) : Steam natif + 32 bits, Heroic (Epic, GOG), Vulkan ; manettes (`plume-manette`) ; émulateurs Switch et PS4 | 🟡 Testé dans un Void vierge : tous les paquets existent (plus de 200 à installer avec le 32 bits), applis Flathub vérifiées (Heroic, ProtonUp-Qt, Ryujinx, shadPS4), règles manettes et groupe `input` posés ; vrais jeux et vraies manettes non testés |
+| UEFI, wifi, son, Bluetooth, veille sur un vrai PC | ⚪ À tester |
+| `slim-firmware.sh` | ⚪ Pas de version Void |
+
+---
+
+## 💿 Deux versions : Alpine ou Void
+
+| | **Plume Alpine** | **Plume Void** |
+|---|---|---|
+| Base | Alpine Linux 3.24 | Void Linux (en continu) |
+| Bibliothèque C | musl | **glibc** |
+| Démarrage des services | OpenRC | runit |
+| Paquets | apk + dépôt `.apk` Plume | xbps + dépôt `.xbps` Plume |
+| ISO | ~380 Mo, bureau installé au 1er démarrage (Internet) | ~1,5 Go, **bureau déjà dedans** : essai en live, installation sans Internet |
+| Pour qui | le plus léger possible | compatibilité : logiciels binaires, jeux (Steam), pilotes NVIDIA |
+
+Même bureau HUD, mêmes outils (`plume-maj`, `plume-parefeu`, `plume-secureboot`, `apt`,
+Logithèque…), même installation automatique (`install.sh --auto`), même disque chiffré
+LUKS2 en option. Les sources C sont communes ; ce qui est propre à Void est dans `void/`.
+
+### Télécharger
+
+Les deux ISO sont sur la page **Releases** du dépôt GitHub :
+https://github.com/ESomnard/alpine-linux-based-on-distro/releases/latest
+
+- `plume-alpine-…-x86_64.iso` : connexion `root` (sans mot de passe), puis `sh /etc/plume/install.sh` ;
+- `plume-void-…-x86_64.iso` : session live `plume` / `voidlinux`, puis dans un terminal
+  `sudo sh /etc/plume/install.sh` ;
+- `SHA256SUMS` : `sha256sum -c SHA256SUMS` pour vérifier le téléchargement.
+
+### Construire et publier (mainteneur)
+
+```sh
+make isos            # les deux ISO dans out/ (Docker)
+make test test-void  # installation complète automatique de chacune dans une VM
+make release         # out/release/ : ISO renommées, SHA256SUMS, notes ; affiche la commande gh
+./build/publier-depot.sh   # dépôts .apk et .xbps signés -> branche gh-pages
+```
 
 ---
 
@@ -599,16 +655,64 @@ Un clic applique tout de suite. Le choix est gardé dans `~/.config/plume/fond.c
 au démarrage ; si l'image a été supprimée, Plume reprend son fond d'origine (sans erreur).
 L'écran de connexion et de verrouillage garde son décor HUD.
 
-### Émulateurs (pack « meilleur émulateur par console »)
+### Jeux vidéo (pack « plume-jeux », Plume Void)
+
+Sur **Plume Void**, une seule commande installe tout ce qu'il faut pour jouer :
+
+```sh
+plume-jeux --liste             # ce qui sera installé
+sudo plume-jeux                # jeux PC + manettes + émulateurs (plusieurs Go)
+sudo plume-jeux --pc           # seulement Steam, Epic, GOG, pilotes et manettes
+sudo plume-jeux --emulateurs   # seulement les émulateurs
+```
+
+| Pour | Ce qui est installé |
+|---|---|
+| **Steam** | Paquet natif Void (dépôts nonfree + multilib 32 bits activés). Jeux Windows : Proton (Steam > Paramètres > Compatibilité) |
+| **Epic Games, GOG, Amazon** | **Heroic Games Launcher** (Flathub). Les installateurs GOG téléchargés (hors ligne) s'importent dans Heroic |
+| **Jeux Windows en plus** | ProtonUp-Qt : versions Proton-GE / Wine-GE pour Steam et Heroic |
+| **Graphismes** | Vulkan + Mesa 64 et 32 bits (Intel, AMD), XWayland, GameMode, MangoHud, gamescope. NVIDIA : `plume-jeux` donne la commande du pilote officiel |
+| **Manettes** | `plume-manette` (ci-dessous) |
+
+#### Manettes (plume-manette)
+
+Xbox, PlayStation (DualShock 4, DualSense), Switch (Pro, Joy-Con), Steam, 8BitDo, PowerA, Hori…
+en USB et en Bluetooth, avec vibrations, gyroscope et pavé tactile.
+
+```sh
+plume-manette                  # manettes branchées (USB / Bluetooth) et batterie
+plume-manette --appairer       # appairer une manette Bluetooth (explique le bouton à tenir)
+plume-manette --tester 0       # tester boutons et sticks
+plume-manette --verifier       # diagnostic : pilotes, droits, règles
+sudo plume-manette --installer # règles d'accès, uinput, outils (fait par plume-jeux)
+```
+
+Les pilotes sont ceux du noyau (`xpad`, `hid-playstation`, `hid-nintendo`, `hid-steam`…).
+`plume-manette --installer` donne au groupe `input` l'accès aux manettes (`hidraw`, pour les
+vibrations et le gyroscope) et à `uinput` (manettes virtuelles de Steam Input), et ajoute un outil
+pour configurer les boutons : AntiMicroX.
+
+#### Émulateurs (pack « meilleur émulateur par console »)
 
 ```sh
 plume-emulation --liste        # quel émulateur pour quelle console
-sudo plume-emulation           # paquets Alpine : NES, Game Boy/GBA, DS, PS1, N64, GameCube/Wii, PSP (~1 Go)
-sudo plume-emulation --tout    # + Flathub : SNES, PS2, PS3, Wii U, 3DS, Xbox, Dreamcast (plusieurs Go)
+sudo plume-emulation           # paquets de la distribution : NES, Game Boy/GBA, DS, PS1, N64, GameCube/Wii, PSP (~1 Go)
+sudo plume-emulation --tout    # + Flathub : SNES, PS2, PS3, Wii U, 3DS, Xbox, Dreamcast (+ PS4 et Switch sur Plume Void)
 ```
 
-Chaque émulateur est aussi dans la Logithèque (catégorie Jeux). Les jeux et BIOS ne sont pas fournis :
-utilise tes propres copies. Les manettes sont reconnues (ton compte est ajouté au groupe `input`).
+| Console | Émulateur |
+|---|---|
+| Game Boy / Color / Advance | mGBA |
+| Wii / GameCube | Dolphin |
+| Nintendo 3DS | Azahar |
+| Nintendo Switch | Ryujinx (Ryubing) |
+| PlayStation 3 | RPCS3 |
+| PlayStation 4 | shadPS4 (encore jeune : une partie des jeux seulement) |
+| PlayStation 5 | **aucun** : aucun émulateur ne lance de jeux PS5 aujourd'hui (les « émulateurs PS5 » trouvés en ligne sont des arnaques) |
+
+Chaque émulateur est aussi dans la Logithèque (catégorie Jeux). Les jeux, BIOS, clés et firmwares
+ne sont pas fournis : utilise uniquement tes propres copies (Switch, PS3, PS4 : fichiers système de
+ta console).
 
 ### Toutes les applications (plume-lanceur)
 
@@ -764,7 +868,7 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Tâche |
 |---|---|
-| 🟠 | **Jeux PC** : Steam (via Flatpak, car Steam a besoin de glibc et Alpine utilise musl), Epic Games et GOG via **Heroic Games Launcher** ; jeux GOG installables aussi en local, hors ligne ; pilotes graphiques et Vulkan, manettes |
+| ✅ | **Jeux PC (Plume Void)** : `sudo plume-jeux` — Steam natif + 32 bits, Epic et GOG via Heroic (installateurs GOG hors ligne importables), Vulkan, GameMode, MangoHud, manettes (`plume-manette`), émulateurs Switch / PS4 ajoutés. Reste : essayer de vrais jeux sur un vrai PC |
 
 ### Bureau et apparence
 
@@ -787,7 +891,7 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 - ISO personnalisée : https://wiki.alpinelinux.org/wiki/How_to_make_a_custom_ISO_image_with_mkimage
 - Recherche de paquets : https://pkgs.alpinelinux.org
 
-## Publier le dépôt .apk Plume (GitHub Pages)
+## Publier les dépôts Plume (GitHub Pages)
 
 Les outils Plume (barre, terminal, panneaux, écran de connexion…) sont des paquets
 .apk signés. Une copie est dans l'ISO. Pour que les PC déjà installés reçoivent les
@@ -797,6 +901,9 @@ nouvelles versions avec `plume-maj`, le dépôt est publié sur GitHub Pages :
 
 **Une seule fois** : sur GitHub, *Settings → Pages → Source : Deploy from a branch*,
 branche **gh-pages**, dossier **/ (root)**. Le dépôt GitHub doit être public (compte gratuit).
+
+Le dépôt `.xbps` de Plume Void est publié au même endroit, dans `plume-void/`
+(`/etc/xbps.d/10-plume.conf` sur Plume Void). Sa clé privée est `cles/plume-void.pem`.
 
 **À chaque nouvelle version** :
 

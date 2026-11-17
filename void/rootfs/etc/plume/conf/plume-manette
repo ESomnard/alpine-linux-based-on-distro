@@ -1,0 +1,165 @@
+#!/bin/sh
+# Plume — manettes de jeu (Plume Void, glibc).
+#   plume-manette                 liste les manettes branchées (USB / Bluetooth, batterie)
+#   plume-manette --verifier      diagnostic : pilotes, droits, règles
+#   plume-manette --tester [N]    teste les boutons et sticks de la manette N
+#   plume-manette --appairer      appaire une manette Bluetooth
+#   sudo plume-manette --installer  pilotes, règles d'accès, outils (fait par plume-jeux)
+#
+# Pilotes du noyau : xpad + hid-microsoft (Xbox), hid-playstation (DualShock 4, DualSense),
+# hid-sony (PS3), hid-nintendo (Switch Pro, Joy-Con), hid-steam (Steam Controller / Deck).
+# Les jeux et émulateurs (SDL2), Steam Input et les navigateurs lisent les manettes
+# directement : ce script leur donne le droit d'y accéder (groupe input) sans root.
+set -eu
+
+REGLES=/etc/udev/rules.d/70-plume-manettes.rules
+MODULES="uinput xpad hid_playstation hid_sony hid_nintendo hid_microsoft hid_steam"
+
+# Les manettes : périphériques d'entrée qui ont un nœud « js » (joystick)
+manettes() {
+	awk '/^I:/ { bus=$2; sub("Bus=","",bus) }
+	     /^N: Name=/ { nom=substr($0, 10); gsub(/"/, "", nom) }
+	     /^H: Handlers=/ { if (match($0, /js[0-9]+/)) {
+	         js=substr($0, RSTART, RLENGTH); ev=""
+	         if (match($0, /event[0-9]+/)) ev=substr($0, RSTART, RLENGTH)
+	         print js "|" ev "|" (bus=="0005" ? "Bluetooth" : bus=="0003" ? "USB" : "autre") "|" nom } }' \
+		/proc/bus/input/devices 2>/dev/null | sort
+}
+
+batteries() {
+	for b in /sys/class/power_supply/*; do
+		[ -f "$b/scope" ] && [ "$(cat "$b/scope")" = Device ] || continue
+		[ -f "$b/capacity" ] || continue
+		printf '  🔋 %s : %s %%' "$(basename "$b")" "$(cat "$b/capacity")"
+		[ -f "$b/status" ] && printf ' (%s)' "$(cat "$b/status")"
+		echo
+	done
+}
+
+liste() {
+	L=$(manettes)
+	if [ -z "$L" ]; then
+		echo "Aucune manette détectée."
+		echo "  USB : branche-la ; Bluetooth : plume-manette --appairer"
+		[ -f $REGLES ] || echo "  Manettes pas encore configurées : sudo plume-manette --installer"
+		return 0
+	fi
+	echo "Manettes branchées :"
+	echo "$L" | while IFS='|' read -r js ev bus nom; do
+		printf '  %-4s %-10s %s\n' "${js#js}" "$bus" "$nom"
+	done
+	batteries
+	echo "Tester : plume-manette --tester N"
+}
+
+verifier() {
+	ok() { printf '  ✔ %s\n' "$1"; }
+	ko() { printf '  ✘ %s\n' "$1"; PB=1; }
+	PB=0
+	echo "Pilotes :"
+	for m in $MODULES; do
+		if [ -d "/sys/module/$m" ]; then ok "$m chargé"
+		elif grep -qs "/$m.ko" "/lib/modules/$(uname -r)/modules.builtin" "/usr/lib/modules/$(uname -r)/modules.builtin"; then ok "$m intégré au noyau"
+		elif modinfo "$m" >/dev/null 2>&1; then ok "$m disponible (chargé quand une manette arrive)"
+		else ko "$m absent du noyau"; fi
+	done
+	echo "Droits :"
+	[ -f $REGLES ] && ok "règles $REGLES" || ko "pas de règles : sudo plume-manette --installer"
+	if id -nG | tr ' ' '\n' | grep -qx input; then ok "$(id -un) est dans le groupe input"
+	else ko "$(id -un) n'est pas dans le groupe input : sudo plume-manette --installer, puis reconnecte-toi"; fi
+	if [ -e /dev/uinput ]; then
+		[ -r /dev/uinput ] && [ -w /dev/uinput ] && ok "/dev/uinput accessible (Steam Input, AntiMicroX)" \
+			|| ko "/dev/uinput non accessible (reconnecte-toi après l'installation)"
+	else ko "/dev/uinput absent (modprobe uinput)"; fi
+	for h in /sys/class/hidraw/hidraw*; do
+		[ -e "$h" ] || continue
+		n=$(basename "$h")
+		id=$(basename "$(readlink -f "$h/device")")
+		case "$id" in *:28DE:*|*:054C:*|*:057E:*|*:045E:*|*:2DC8:*|*:20D6:*|*:0E6F:*|*:0F0D:*|*:146B:*|*:3285:*) ;; *) continue ;; esac
+		[ -r "/dev/$n" ] && ok "/dev/$n ($id) accessible (vibrations, gyroscope)" || ko "/dev/$n ($id) non accessible"
+	done
+	echo
+	[ $PB = 0 ] && echo "Tout est prêt." || echo "Des problèmes ont été trouvés (✘)."
+	return $PB
+}
+
+tester() {
+	N=${1:-0}
+	[ -e "/dev/input/js$N" ] || { echo "Pas de manette n°$N." >&2; liste; exit 1; }
+	echo "Appuie sur les boutons et bouge les sticks. Ctrl+C pour quitter."
+	if command -v jstest >/dev/null 2>&1; then exec jstest --normal "/dev/input/js$N"
+	fi
+	ev=$(manettes | awk -F'|' -v j="js$N" '$1==j {print $2}')
+	command -v evtest >/dev/null 2>&1 && [ -n "$ev" ] && exec evtest "/dev/input/$ev"
+	echo "jstest et evtest absents : sudo plume-manette --installer" >&2; exit 1
+}
+
+appairer() {
+	command -v bluetoothctl >/dev/null 2>&1 || { echo "Bluetooth absent (paquet bluez)." >&2; exit 1; }
+	cat <<'A'
+Mets la manette en mode appairage :
+  Xbox            : maintiens le petit bouton d'appairage (sur le dessus) jusqu'au clignotement rapide
+  PS4 / PS5       : maintiens SHARE (ou CRÉER) + PS jusqu'au clignotement
+  Switch Pro      : maintiens le petit bouton près du port USB
+  Joy-Con         : maintiens le petit bouton sur la tranche
+  8BitDo          : voir la notice (souvent START + X ou Y)
+Recherche pendant 20 secondes…
+A
+	bluetoothctl power on >/dev/null 2>&1 || true
+	bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
+	L=$(bluetoothctl devices | sed -n 's/^Device //p')
+	[ -n "$L" ] || { echo "Aucun appareil trouvé. Réessaie." >&2; exit 1; }
+	echo "$L" | awk '{ printf "  %d) %s\n", NR, $0 }'
+	printf 'Numéro de la manette : '
+	read -r i
+	MAC=$(echo "$L" | sed -n "${i}p" | cut -d' ' -f1)
+	[ -n "$MAC" ] || { echo "Choix invalide." >&2; exit 1; }
+	bluetoothctl pair "$MAC" && bluetoothctl trust "$MAC" && bluetoothctl connect "$MAC"
+	echo "Manette appairée : elle se reconnectera toute seule (appuie sur son bouton central)."
+}
+
+installer() {
+	[ "$(id -u)" -eq 0 ] || exec sudo "$0" --installer
+	echo "Règles d'accès aux manettes : $REGLES"
+	mkdir -p /etc/udev/rules.d
+	cat > $REGLES <<'R'
+# Plume — accès aux manettes sans root (groupe input).
+# uinput : manettes virtuelles (Steam Input, AntiMicroX)
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", GROUP="input", MODE="0660"
+# hidraw : vibrations, gyroscope, pavé tactile, LED (SDL2, Steam, émulateurs), USB et Bluetooth
+# Valve, Sony, Nintendo, Microsoft, 8BitDo, PowerA, PDP, Hori, Nacon
+KERNEL=="hidraw*", KERNELS=="*:28DE:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:054C:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:057E:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:045E:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:2DC8:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:20D6:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:0E6F:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:0F0D:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:146B:*", GROUP="input", MODE="0660"
+KERNEL=="hidraw*", KERNELS=="*:3285:*", GROUP="input", MODE="0660"
+R
+	# uinput chargé à chaque démarrage (les autres pilotes se chargent seuls)
+	mkdir -p /etc/modules-load.d
+	echo uinput > /etc/modules-load.d/plume-manettes.conf
+	modprobe uinput 2>/dev/null || true
+
+	echo "Outils : test, configuration des boutons"
+	xbps-install -Sy evtest linuxconsoletools antimicrox steam-udev-rules
+	U=${SUDO_USER:-}
+	if [ -n "$U" ]; then
+		usermod -aG input "$U"
+	fi
+	udevadm control --reload 2>/dev/null || true
+	udevadm trigger --subsystem-match=hidraw --subsystem-match=misc 2>/dev/null || true
+	echo "Manettes prêtes${U:+ pour $U} (reconnecte-toi si tu viens d'être ajouté au groupe input)."
+}
+
+case "${1:-}" in
+"") liste ;;
+--verifier) verifier ;;
+--tester) tester "${2:-0}" ;;
+--appairer) appairer ;;
+--installer) installer ;;
+*) echo "Usage : plume-manette [--verifier | --tester N | --appairer] | sudo plume-manette --installer" >&2; exit 2 ;;
+esac

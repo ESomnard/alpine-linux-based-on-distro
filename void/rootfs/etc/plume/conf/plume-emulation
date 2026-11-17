@@ -1,0 +1,64 @@
+#!/bin/sh
+# Plume — pack émulation : le meilleur émulateur pour chaque console connue.
+#   sudo plume-emulation           paquets Void (~1 Go, Qt compris)
+#   sudo plume-emulation --tout    + Flathub pour PS2, PS3, PS4, Switch, Wii U, 3DS, Xbox, Dreamcast… (plusieurs Go)
+#   plume-emulation --liste        affiche ce qui serait installé
+# Les jeux (ROM, BIOS) ne sont pas fournis : utilise uniquement tes propres copies.
+set -eu
+VOID="retroarch libretro-mupen64plus dolphin-emu ppsspp melonDS mgba"
+FLATHUB="net.pcsx2.PCSX2 net.rpcs3.RPCS3 info.cemu.Cemu org.azahar_emu.Azahar app.xemu.xemu
+org.flycast.Flycast ca.mesen.Mesen com.github.Rosalie241.RMG
+io.github.ryubing.Ryujinx net.shadps4.shadPS4"
+
+liste() {
+	cat <<'L'
+Console                         Émulateur            Source
+Game Boy / Color / Advance      mGBA                 Void
+Nintendo DS                     melonDS              Void
+PlayStation 1                   RetroArch (Beetle)   Void (cœur via RetroArch)
+Nintendo 64                     RetroArch (Mupen64)  Void
+GameCube / Wii                  Dolphin              Void
+PSP                             PPSSPP               Void
+--- avec --tout (Flathub) ---
+NES / Super Nintendo            Mesen                Flathub
+Nintendo 64 (interface dédiée)  Rosalie's Mupen GUI  Flathub
+PlayStation 2                   PCSX2                Flathub
+PlayStation 3                   RPCS3                Flathub
+Wii U                           Cemu                 Flathub
+Nintendo 3DS                    Azahar               Flathub
+Xbox                            xemu                 Flathub
+Dreamcast                       Flycast              Flathub
+PlayStation 4                   shadPS4              Flathub (jeunes : une partie des jeux seulement)
+Nintendo Switch                 Ryujinx (Ryubing)    Flathub
+PlayStation 5                   — aucun émulateur ne lance de jeux PS5 aujourd'hui
+                                  (méfie-toi des « émulateurs PS5 » : ce sont des arnaques)
+Switch, PS3, PS4 : il faut les fichiers système de TA console (clés, firmware), non fournis.
+L
+}
+
+case "${1:-}" in
+--liste) liste; exit 0 ;;
+--tout|"") ;;
+*) echo "Usage : sudo plume-emulation [--tout] | plume-emulation --liste" >&2; exit 2 ;;
+esac
+if [ "$(id -u)" -ne 0 ]; then
+	exec sudo "$0" "$@"
+fi
+liste
+echo; echo "==> Émulateurs Void"
+# shellcheck disable=SC2086
+xbps-install -Sy $VOID
+# manettes : accès aux périphériques de jeu pour l'utilisateur (groupe input)
+U=${SUDO_USER:-}
+[ -n "$U" ] && usermod -aG input "$U" 2>/dev/null || true
+# règles d'accès aux manettes (vibrations, gyroscope, Steam Input)
+command -v plume-manette >/dev/null 2>&1 && plume-manette --installer || true
+if [ "${1:-}" = --tout ]; then
+	echo; echo "==> Émulateurs Flathub (pour $U, sans droits administrateur)"
+	xbps-install -y flatpak
+	[ -n "$U" ] || { echo "Lance avec sudo depuis ton compte pour installer les applis Flathub." >&2; exit 1; }
+	su "$U" -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+		flatpak install --user -y --noninteractive flathub $(echo $FLATHUB)"
+fi
+echo; echo "Terminé. Les émulateurs sont dans la grille des applications (Super + a)."
+echo "Manettes : plume-manette (liste, test, appairage Bluetooth)."
