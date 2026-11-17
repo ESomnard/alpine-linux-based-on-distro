@@ -50,6 +50,9 @@ finir() {
 echo "==> Paquets Plume $VERSION (révision $REL)"
 # plume-hud : + fond d'écran par défaut, PAM à la façon de Void
 rm -rf "$D" /tmp/b && cp -r "$W/hud" /tmp/b
+# texte du fond d'écran : Void au lieu d'Alpine (sur la copie : les sources de hud/ ne changent pas)
+sed -i 's/ALPINE LINUX  ·  HUD/VOID LINUX  ·  HUD/' /tmp/b/wall.c
+grep -q 'VOID LINUX' /tmp/b/wall.c || { echo "ÉCHEC : texte du fond introuvable dans hud/wall.c" >&2; exit 1; }
 make -s -C /tmp/b clean >/dev/null 2>&1 || true
 make -s -C /tmp/b >/dev/null && make -s -C /tmp/b install DESTDIR="$D" PREFIX=/usr >/dev/null
 printf '# PAM de l écran de verrouillage plume-hud (comme swaylock)\nauth include system-auth\n' > "$D/etc/pam.d/plume-hud"

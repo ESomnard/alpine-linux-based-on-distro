@@ -2,3 +2,4 @@
 
   Installation sur disque :      sudo sh /etc/plume/install.sh
   Mises à jour :                 plume-maj
+  Alléger les firmwares :        sudo sh /etc/plume/slim-firmware.sh

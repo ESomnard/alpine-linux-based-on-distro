@@ -1,0 +1,27 @@
+# Plume — Firefox confiné : il garde ses fonctions (sites, téléchargements, son, vidéo, son
+# propre bac à sable) mais ne peut pas lire tes secrets, s'installer au démarrage ni exécuter
+# un fichier téléchargé. Ajustements perso : /etc/apparmor.d/local/plume-firefox
+abi <abi/4.0>,
+include <tunables/global>
+
+profile plume-firefox /usr/lib/firefox/{firefox,firefox-bin,gfxtest,glxtest,vaapitest,pingsender,crashreporter,crashhelper,minidump-analyzer} flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/plume-perso>
+
+  file,
+  network,
+  unix,
+  dbus,
+  # bac à sable de Firefox (espaces de noms utilisateur, chroot)
+  userns,
+  capability sys_admin,
+  capability sys_chroot,
+  capability sys_ptrace,
+  capability setuid,
+  capability setgid,
+  ptrace (read, trace) peer=plume-firefox,
+  signal (send, receive) peer=plume-firefox,
+  signal (receive),
+
+  include if exists <local/plume-firefox>
+}

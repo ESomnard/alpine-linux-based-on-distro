@@ -1,0 +1,24 @@
+# Plume — Zathura (PDF) confiné, sans Internet : un PDF piégé ne peut rien envoyer.
+# Pas d'accès à tes secrets ni aux cookies de Firefox, pas de démarrage automatique,
+# pas d'exécution de fichiers téléchargés. Ajustements perso : /etc/apparmor.d/local/plume-zathura
+abi <abi/4.0>,
+include <tunables/global>
+
+profile plume-zathura /usr/bin/zathura{,-sandbox} flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/plume-perso>
+
+  file,
+  network unix,
+  deny network inet,
+  deny network inet6,
+  unix,
+  dbus,
+  signal (send, receive) peer=plume-zathura,
+  signal (receive),
+  deny @{HOME}/.mozilla/** mrwklx,
+  # un lien ouvert depuis l'appli : Firefox garde son propre profil
+  /usr/lib/firefox/firefox Px -> plume-firefox,
+
+  include if exists <local/plume-zathura>
+}

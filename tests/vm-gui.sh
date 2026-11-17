@@ -43,6 +43,7 @@ esac
 echo "VM en cours de démarrage (émulation logicielle : c'est lent, sois patient)."
 echo "Connexion : vnc://localhost:5901   mot de passe : plume"
 echo "Arrêt     : Ctrl+C ici, ou éteindre depuis la VM."
+echo "Capture   : ./tests/vm-capture.sh  (image dans out/vm/ecran.png)"
 
 # terminal interactif -> on reste attaché ; sinon la VM tourne en arrière-plan
 [ -t 0 ] && IT=-it || IT=-d
@@ -54,5 +55,6 @@ exec docker run --rm $IT --name plume-vm --platform linux/amd64 \
 		exec qemu-system-x86_64 -accel tcg,thread=multi -cpu max -smp 4 -m 3072 \
 			$BOOT -nic user,model=virtio-net-pci \
 			-vga virtio -usb -device usb-tablet \
-			-k fr -object secret,id=vncpw,data=plume -vnc 0.0.0.0:1,password-secret=vncpw
+			-k fr -object secret,id=vncpw,data=plume -vnc 0.0.0.0:1,password-secret=vncpw \
+			-monitor unix:/tmp/moniteur.sock,server,nowait
 	"

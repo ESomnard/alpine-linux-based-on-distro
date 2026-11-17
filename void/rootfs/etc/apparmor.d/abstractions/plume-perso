@@ -1,0 +1,29 @@
+# Plume — ce qu'une appli confinée ne doit JAMAIS faire, même si elle est piratée
+# (page web piégée, PDF ou vidéo malveillants). Inclus par les profils plume-*.
+  abi <abi/4.0>,
+
+  # secrets : clés SSH/GPG, mots de passe, jetons
+  deny @{HOME}/.ssh/** mrwklx,
+  deny @{HOME}/.gnupg/** mrwklx,
+  deny @{HOME}/.password-store/** mrwklx,
+  deny @{HOME}/.local/share/keyrings/** mrwklx,
+  deny @{HOME}/.{netrc,git-credentials} mrwklx,
+  deny @{HOME}/.config/git/credentials mrwklx,
+  deny @{HOME}/.{aws,kube,azure}/** mrwklx,
+  deny @{HOME}/.docker/config.json mrwklx,
+
+  # démarrage automatique : interdit de s'installer pour se relancer à chaque session
+  deny @{HOME}/.{profile,bash_profile,bash_login,bashrc,ashrc,zshrc,zprofile,xinitrc} wl,
+  deny @{HOME}/.config/{sway,autostart,environment.d,plume}/** wl,
+  deny @{HOME}/.local/share/applications/** wl,
+  deny @{HOME}/{bin,.local/bin}/** wl,
+
+  # exécuter un fichier téléchargé ou temporaire
+  deny @{HOME}/** x,
+  deny /tmp/** x,
+  deny /var/tmp/** x,
+  deny /dev/shm/** x,
+
+  # système
+  deny /etc/{shadow,gshadow}* r,
+  deny /etc/{sudoers,sudoers.d/**,doas.conf,doas.d/**} r,

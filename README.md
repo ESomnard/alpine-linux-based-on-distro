@@ -173,11 +173,12 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Pare-feu, AppArmor, sysctl | ✅ Testé en VM |
 | `plume-maj --verifier` sans mot de passe, `apt` → xbps, `plume-parefeu`, Logithèque, police, Internet | ✅ Testé en VM |
 | Disque chiffré LUKS2 | ✅ Testé en VM (phrase demandée au démarrage, racine chiffrée, toutes les vérifications OK) |
-| Session sway ouverte (barre, dock, son, pinyin) | 🟡 Mêmes composants qu'Alpine, pas encore vus en VM sous Void |
+| Session sway ouverte : barre, dock, son (PipeWire), terminal, lanceur | ✅ Vue en VM (captures d'écran) : sway 1.12, ~420 Mo de RAM avec le terminal ouvert ; texte du fond d'écran (« VOID LINUX ») et raccourcis Foot en double corrigés |
+| Profils AppArmor Plume : Firefox, mpv, imv, Zathura | ✅ Testé en VM : 4 profils en mode enforce ; Firefox démarre confiné ; une appli confinée lit tes documents mais pas `~/.ssh`, ne peut ni modifier `.bashrc` ni exécuter un fichier téléchargé ; Zathura (PDF) n'a pas Internet |
 | `plume-secureboot` (UKI dracut signée), pack émulation | 🟡 Codés, pas testés |
 | Pack jeux (`plume-jeux`) : Steam natif + 32 bits, Heroic (Epic, GOG), Vulkan ; manettes (`plume-manette`) ; émulateurs Switch et PS4 | 🟡 Testé dans un Void vierge : tous les paquets existent (plus de 200 à installer avec le 32 bits), applis Flathub vérifiées (Heroic, ProtonUp-Qt, Ryujinx, shadPS4), règles manettes et groupe `input` posés ; vrais jeux et vraies manettes non testés |
 | UEFI, wifi, son, Bluetooth, veille sur un vrai PC | ⚪ À tester |
-| `slim-firmware.sh` | ⚪ Pas de version Void |
+| `slim-firmware.sh` (alléger les firmwares) | ✅ Testé en VM : 667 Mo → 1 Mo ; seuls les fichiers utiles à ton matériel restent, et des règles `noextract` de xbps empêchent les mises à jour de remettre les autres (`--restaurer` remet tout). Bug trouvé et corrigé : noms de firmwares avec espaces |
 
 ---
 
@@ -633,7 +634,7 @@ Les touches mortes de l'AZERTY marchent (`^` puis `e` = `ê`).
 | **Noyau durci** (`/etc/sysctl.d/60-plume.conf`) | Cache les adresses et le journal du noyau. Interdit d'espionner un autre programme (ptrace), réserve eBPF à root, bloque kexec. Refuse les redirections réseau et les adresses usurpées, et résiste aux inondations SYN. Flatpak, Steam et Docker marchent toujours. | Rien à faire |
 | **Disque chiffré** (LUKS2, en option) | Sans ta phrase secrète, personne ne lit tes fichiers, même avec le PC volé ou le disque retiré. Elle est demandée à chaque démarrage, avant l'écran de connexion. **Oubliée = données perdues.** | À l'installation : réponds `o` à « Chiffrer le disque », ou mets `CHIFFREMENT="oui"` + `PHRASE_CHIFFREMENT` dans le fichier de `--auto` |
 | **Mises à jour** | La barre affiche **⬆ N MAJ** dès que des correctifs sont publiés, et **★ 3.xx** quand une nouvelle version d'Alpine sort. | Clic sur ⬆ ou ★, ou `plume-maj` / `plume-maj --nouvelle-version` |
-| **AppArmor** | Confinement des programmes par profils, activé au démarrage (`lsm=…,apparmor`). Les profils fournis par Alpine visent surtout des serveurs ; Firefox, Chromium, Discord… y sont pour l'instant « non confinés ». Le profil de `unix_chkpwd` est désactivé par précaution : il vérifie le mot de passe de l'écran de verrouillage et n'a pas été éprouvé avec musl. Coût : Python 3 (~45 Mo), exigé par le paquet `apparmor` d'Alpine. | État : `cat /sys/module/apparmor/parameters/enabled` (Y) · retirer : `sudo apk del apparmor apparmor-profiles` |
+| **AppArmor** | Confinement des programmes par profils, activé au démarrage (`lsm=…,apparmor`). Les profils fournis par Alpine visent surtout des serveurs ; Firefox, Chromium, Discord… y sont pour l'instant « non confinés ». **Plume Void** a ses propres profils pour Firefox, mpv, imv et Zathura (`/etc/apparmor.d/plume-*`) : l'appli garde accès à tes documents, mais pas à tes secrets (`~/.ssh`, `~/.gnupg`, mots de passe), ne peut pas s'installer au démarrage (`.bashrc`, config sway) ni exécuter un fichier téléchargé ; Zathura et imv n'ont pas Internet. Si une appli bloque : `/etc/apparmor.d/local/plume-<appli>`. Le profil de `unix_chkpwd` est désactivé par précaution : il vérifie le mot de passe de l'écran de verrouillage et n'a pas été éprouvé avec musl. Coût : Python 3 (~45 Mo), exigé par le paquet `apparmor` d'Alpine. | État : `cat /sys/module/apparmor/parameters/enabled` (Y) · retirer : `sudo apk del apparmor apparmor-profiles` |
 | **Démarrage sécurisé** (Secure Boot, UEFI, en option) | Tes propres clés. Le noyau, l'initramfs et la ligne de démarrage forment une seule image signée, refaite et re-signée à chaque mise à jour du noyau. Les clés Microsoft sont gardées (cartes graphiques, Windows en double démarrage). | `plume-secureboot` (état) · `sudo plume-secureboot activer` (firmware en « mode configuration ») · `sudo plume-secureboot preparer` |
 | **Pas de root direct** | En installation auto, le compte root est verrouillé : tout passe par `sudo` et ton mot de passe. Aucun serveur (SSH…) n'écoute. | — |
 
@@ -843,6 +844,44 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 | ✅ | **plume-hud : clavier débranché puis rebranché** (corrigé) | L'écran de connexion et de verrouillage abandonne l'ancien clavier ou l'ancienne souris quand ils disparaissent et en reprend un neuf au retour. Testé (`tests/hud-cpu-inside.sh`) : un 1er clavier tape un mauvais mot de passe puis disparaît, un 2e tape le bon et déverrouille ; l'ancienne version restait bloquée. |
 | ✅ | **plume-hud : processeur** (corrigé) | Il redessinait tout l'écran 20 fois par seconde, même écran éteint. Il attend maintenant que l'image soit affichée, et ralentit à 5 images/s après 8 s sans frappe. Mesuré en 1920×1080 (rendu logiciel) : **42 % → 11 %** écran allumé, **42 % → 0 %** écran éteint, apparence identique. |
 
+### Ce qu'Ubuntu a en plus (à ajouter à Plume Void)
+
+Comparaison avec Ubuntu : ce qui manque vraiment au quotidien.
+
+| Priorité | Manque | Ce qui coince sans | Ce qu'il faut |
+|---|---|---|---|
+| 🔴 | **Clés USB et disques externes** | Une clé branchée ne s'ouvre pas dans le gestionnaire de fichiers | udisks2, polkit, gvfs, montage automatique |
+| 🔴 | **Portails Wayland** | Pas de partage d'écran (Discord, Meet, Teams dans Firefox) ; fenêtres « Ouvrir un fichier » cassées dans les applis Flatpak (Heroic, Steam) | xdg-desktop-portal-wlr et -gtk |
+| 🔴 | **Secure Boot sans réglage** | Sur un PC récent, Plume ne démarre pas tant que Secure Boot n'est pas désactivé ou que tes clés ne sont pas inscrites ; Ubuntu démarre directement grâce à un chargeur signé par Microsoft (shim) | Marche à suivre claire dans l'installateur, ou shim |
+| 🔴 | **Réglage des écrans** | Aucun moyen simple de régler la résolution, le zoom (écran 4K), un 2e écran ou un vidéoprojecteur | Panneau HUD « écrans » (wlr-randr / kanshi) |
+| 🟠 | **Imprimante et scanner** | Impossible d'imprimer ou de numériser | CUPS + pilotes, sane, panneau simple |
+| 🟠 | **Batterie** | Pas de mode économie / performance | power-profiles-daemon ou TLP, affichage dans la barre |
+| 🟠 | **Mise à jour du BIOS et des firmwares** | Le BIOS et les firmwares du PC ne sont jamais mis à jour | fwupd |
+| 🟠 | **Installateur graphique** | `install.sh` se lance dans un terminal : difficile pour un débutant | Installateur HUD à la souris |
+| 🟠 | **Wifi d'hôtel ou de gare** | La page de connexion du wifi public ne s'ouvre pas toute seule | Détection du portail captif et ouverture de Firefox |
+| 🟠 | **Lumière du soir** | Pas de filtre de lumière bleue | wlsunset + bouton dans la barre |
+| 🟢 | **Retour en arrière** après une mauvaise mise à jour | Void évolue en continu : une mise à jour ratée peut casser le système | Instantanés btrfs, ou ancien noyau au choix dans GRUB |
+| 🟢 | **Sauvegarde** des fichiers | Pas d'outil de sauvegarde simple | Équivalent de Déjà Dup |
+| 🟢 | **VPN** en un clic | Il faut tout configurer à la main | WireGuard / OpenVPN dans un panneau |
+| 🟢 | **Accessibilité** | Ni loupe ni lecteur d'écran | Loupe, lecteur d'écran, clavier à l'écran hors du terminal |
+
+#### Pour le jeu vidéo et le développement pro
+
+| Priorité | Usage | Ce qui coince | Ce qu'il faut |
+|---|---|---|---|
+| 🔴 | Dev pro, jeux | **Partage d'écran** en réunion (Teams, Meet, Zoom, Slack) ou en stream (Discord, OBS) impossible | Portails Wayland (ligne 🔴 ci-dessus) |
+| 🔴 | Dev pro | **VS Code** : seule la version Flatpak est dans la Logithèque ; son terminal intégré ne voit ni tes compilateurs ni Docker | Version native (`vscode` dans Void) dans la Logithèque |
+| 🟠 | Jeux | **Carte NVIDIA** : pilote officiel à installer à la main (`plume-jeux` donne seulement la commande) | Détection et installation automatiques du bon pilote (`nvidia` ou `nvidia470` + 32 bits) |
+| 🟠 | Dev pro | **VPN d'entreprise** (OpenVPN, Cisco AnyConnect, GlobalProtect, WireGuard) souvent obligatoire au travail | Paquets VPN + panneau (ligne VPN ci-dessus, à remonter en 🟠) |
+| 🟢 | Jeux | **HDR** : sway ne le gère pas encore bien | Attendre sway, ou gamescope en HDR |
+| 🟢 | Dev pro | **Pas de systemd** : quelques outils et tutoriels supposent `systemctl` | Distrobox (Ubuntu dans un conteneur) ; Docker marche déjà avec runit |
+| — | Jeux | **Anti-triche noyau** (Valorant, Fortnite, Call of Duty…) | Rien à faire : ces jeux ne marchent sur aucune distro Linux |
+| — | Dev pro | **PC géré par l'entreprise** (antivirus imposé, gestion à distance) | Hors de portée : ces outils ne supportent qu'Ubuntu ou RHEL |
+
+Déjà aussi bien ou mieux qu'Ubuntu : mises à jour en un clic, pare-feu actif par défaut, disque chiffré,
+AppArmor avec de vrais profils, magasin d'applis (Logithèque), wifi, son, Bluetooth, jeux et manettes,
+et environ 150 Mo de RAM pour le bureau.
+
 ### Stabilité et matériel
 
 | Priorité | Tâche |
@@ -854,7 +893,7 @@ ps -o pid,rss,comm | sort -k2 -n | tail   # processus les plus gourmands
 
 | Priorité | Tâche |
 |---|---|
-| ✅ | **Sécuriser la distro** : pare-feu nftables (`plume-parefeu`), noyau durci (`sysctl`), disque chiffré LUKS2 en option, AppArmor, Secure Boot avec tes clés (`plume-secureboot`). Reste : de vrais profils AppArmor pour Firefox et les applis |
+| ✅ | **Sécuriser la distro** : pare-feu nftables (`plume-parefeu`), noyau durci (`sysctl`), disque chiffré LUKS2 en option, AppArmor, Secure Boot avec tes clés (`plume-secureboot`). Plume Void : vrais profils AppArmor pour Firefox, mpv, imv et Zathura (`/etc/apparmor.d/plume-*`) |
 | ✅ | **Mises à jour simples** : `plume-maj` + ⬆ MAJ dans la barre (paquets Alpine + Flatpak), passage à la version suivante d'Alpine (`plume-maj --nouvelle-version`, ★ dans la barre). Reste : les outils Plume eux-mêmes (dépôt .apk ci-dessous) |
 | ✅ | Dépôt `.apk` Plume (`make depot`, signé, embarqué dans l'ISO), publication sur GitHub Pages préparée par `./build/publier-depot.sh` |
 | 🟢 | **Plus tard (optionnel) : publication automatique du dépôt** — une GitHub Action qui reconstruit et publie le dépôt à chaque push. Il faudrait confier la clé privée de signature aux *secrets* GitHub : pratique, mais la clé ne serait plus seulement chez toi. En attendant : `./build/publier-depot.sh` à la main |

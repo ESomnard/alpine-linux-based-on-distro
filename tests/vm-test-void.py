@@ -133,10 +133,35 @@ ok &= vm.check("police JetBrains Mono", "fc-list | grep -c JetBrains", r"[1-9]")
 ok &= vm.check("Internet", f"echo {PW} | sudo -S xbps-install -S >/dev/null && echo net-ok", r"net-ok", 120)
 if CHIFFRE:
     ok &= vm.check("racine chiffrée", "lsblk -o TYPE,MOUNTPOINT | grep crypt", r"crypt")
+# AppArmor : profils Plume chargés et vraiment appliqués
+ok &= vm.check("profils AppArmor Plume chargés (enforce)",
+               f"echo {PW} | sudo -S cat /sys/kernel/security/apparmor/profiles | grep -c '^plume-.*(enforce)'", r"\b4\b")
+vm.run("mkdir -p ~/.ssh && echo secret > ~/.ssh/id_test && echo doc > ~/doc.txt && cp /usr/bin/true ~/prog")
+ok &= vm.check("AppArmor : Firefox lit tes documents mais pas tes clés SSH",
+               "aa-exec -p plume-firefox -- cat ~/doc.txt && ! aa-exec -p plume-firefox -- cat ~/.ssh/id_test && echo aa-ok", r"aa-ok")
+ok &= vm.check("AppArmor : pas d'exécution d'un fichier téléchargé",
+               "~/prog && ! aa-exec -p plume-firefox -- sh -c ~/prog && echo exec-bloque", r"exec-bloque")
+ok &= vm.check("AppArmor : pas de démarrage automatique (.bashrc)",
+               "! aa-exec -p plume-mpv -- sh -c 'echo x >> ~/.bashrc' && echo persist-bloque", r"persist-bloque")
+ok &= vm.check("AppArmor : Zathura (PDF) sans Internet",
+               "wget -q -O /dev/null http://repo-default.voidlinux.org/ && ! aa-exec -p plume-zathura -- wget -q -O /dev/null http://repo-default.voidlinux.org/ && echo net-bloque",
+               r"net-bloque", 120)
+ok &= vm.check("Firefox démarre confiné (plume-firefox)",
+               "(firefox --headless --no-remote about:blank >/dev/null 2>&1 &) ; sleep 60 ; "
+               "cat /proc/$(pgrep -o -f /usr/lib/firefox/firefox)/attr/apparmor/current ; pkill -f /usr/lib/firefox/firefox",
+               r"plume-firefox \(enforce\)", 240)
 # capture de l'écran de connexion (cage accepte grim)
 vm.run(f"echo {PW} | sudo -S sh -c '"
        "XDG_RUNTIME_DIR=/var/lib/_greeter/runtime WAYLAND_DISPLAY=$(ls /var/lib/_greeter/runtime | grep -m1 ^wayland-[0-9]$) "
        "grim /tmp/g.png' ; echo ===B64START greeter=== ; base64 /tmp/g.png ; echo ===B64END===", 300)
 vm.run("df -h / | tail -1; free -m | sed -n 2p")
+# slim-firmware (en dernier : allège le disque de test)
+ok &= vm.check("slim-firmware : firmwares allégés, base xbps intacte",
+               "a=$(du -sm /usr/lib/firmware | cut -f1); "
+               f"echo {PW} | sudo -S sh /etc/plume/slim-firmware.sh --oui >/tmp/slim.log 2>&1; "
+               "b=$(du -sm /usr/lib/firmware | cut -f1); echo \"firmwares : $a Mo -> $b Mo\"; "
+               f"[ $b -lt $a ] && [ -f /etc/xbps.d/90-plume-firmware.conf ] && echo {PW} | sudo -S xbps-pkgdb $(xbps-query -l | awk '{{print $2}}' | sed 's/-[^-]*$//' | grep -- -firmware) && echo slim-ok",
+               r"slim-ok", 900)
+vm.run("tail -4 /tmp/slim.log")
 step("SUCCES : tous les tests sont passés" if ok else "ECHEC : au moins un test a échoué")
 vm.p.send(f"echo {PW} | sudo -S poweroff\r")
