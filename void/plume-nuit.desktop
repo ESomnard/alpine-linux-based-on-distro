@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Lumière du soir
+Comment=Écran plus chaud le soir (Super + n)
+Exec=plume-nuit
+Icon=weather-clear-night
+Terminal=false
+Categories=Settings;
+Keywords=nuit;soir;lumière bleue;night;filtre;

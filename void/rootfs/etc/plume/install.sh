@@ -158,7 +158,8 @@ LIVE_USER=$(sed -n 's/^USERNAME=//p' /etc/default/live.conf 2>/dev/null || echo 
 IN userdel -r "$LIVE_USER" 2>/dev/null || IN userdel "$LIVE_USER" 2>/dev/null || true
 rm -f "$MNT/etc/sudoers.d/99-void-live" "$MNT/etc/default/live.conf" \
 	"$MNT/etc/polkit-1/rules.d/void-live.rules" "$MNT/etc/runit/core-services/04-plume-live.sh"
-rm -rf "$MNT/etc/plume/install.sh" "$MNT/etc/plume/install-auto.conf"
+rm -rf "$MNT/etc/plume/install.sh" "$MNT/etc/plume/install-auto.conf" \
+	"$MNT/etc/plume/installer-graphique.sh" "$MNT/usr/share/applications/plume-installer.desktop"
 sed -i '/Installation sur disque/d' "$MNT/etc/motd"
 sed -i 's/-a [^ ]* //' "$MNT/etc/sv/agetty-tty1/conf" 2>/dev/null || true
 
@@ -169,7 +170,7 @@ grep -q '^KEYMAP=' "$MNT/etc/rc.conf" || echo "KEYMAP=$CLAVIER" >> "$MNT/etc/rc.
 sed -i "s|^#*TIMEZONE=.*|TIMEZONE=$FUSEAU|" "$MNT/etc/rc.conf"
 
 # utilisateur (mots de passe : seulement dans /etc/shadow du système installé)
-IN useradd -m -s /bin/bash -G wheel,audio,video,input,_seatd,network,bluetooth,storage "$UTILISATEUR"
+IN useradd -m -s /bin/bash -G wheel,audio,video,input,_seatd,network,bluetooth,storage,lpadmin,scanner "$UTILISATEUR"
 printf '%s:%s\n' "$UTILISATEUR" "$MOT_DE_PASSE" | IN chpasswd -c SHA512
 if [ -n "$MOT_DE_PASSE_ROOT" ]; then
 	printf 'root:%s\n' "$MOT_DE_PASSE_ROOT" | IN chpasswd -c SHA512
@@ -230,6 +231,19 @@ echo
 echo "Installation terminée."
 [ "$CHIFFREMENT" = oui ] && echo "Disque chiffré : ta phrase secrète sera demandée à chaque démarrage."
 echo "Au démarrage : écran de connexion HUD → $UTILISATEUR + ton mot de passe."
+# Secure Boot : Plume n'a pas de chargeur signé par Microsoft ; il faut tes propres clés
+if [ -d /sys/firmware/efi ]; then
+	cat <<'SB'
+
+Secure Boot (démarrage sécurisé) : il est désactivé, sinon cette clé USB n'aurait pas démarré.
+Pour le réactiver avec TES propres clés, une fois Plume installé :
+  1. dans le BIOS/UEFI (touche F2, Suppr ou F10 au démarrage), section Secure Boot :
+     « Reset to Setup Mode » ou « Clear Secure Boot keys » (les clés Microsoft seront remises) ;
+  2. redémarre sur Plume, puis :  sudo plume-secureboot activer
+  3. de retour dans le BIOS : active Secure Boot.
+  État à tout moment :  plume-secureboot
+SB
+fi
 if [ "$REDEMARRER" = oui ]; then
 	echo "Redémarrage dans 10 s (retire la clé USB)…"
 	sleep 10

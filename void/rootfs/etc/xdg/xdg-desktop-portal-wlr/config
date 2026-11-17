@@ -1,0 +1,4 @@
+# Plume — partage d'écran : s'il y a plusieurs écrans, clique sur celui à partager
+[screencast]
+chooser_type=simple
+chooser_cmd=slurp -f %o -or -b 02060bcc -c 4fb8e0

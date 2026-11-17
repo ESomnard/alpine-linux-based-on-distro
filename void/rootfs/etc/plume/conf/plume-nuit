@@ -1,0 +1,25 @@
+#!/bin/sh
+# Plume (Void) — lumière du soir : écran plus chaud (moins de lumière bleue) le soir.
+#   plume-nuit             active / désactive (raccourci : Super + n)
+#   plume-nuit on|off      force
+#   plume-nuit --demarrage reprend le dernier choix (lancé par sway)
+# Horaires : coucher 20 h, lever 7 h 30 (modifiables dans ~/.config/plume/nuit.conf :
+# COUCHER=20:00 LEVER=07:30 CHAUD=3500).
+set -eu
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plume"
+ETAT="$DIR/nuit"
+COUCHER=20:00 LEVER=07:30 CHAUD=3500
+[ -r "$DIR/nuit.conf" ] && . "$DIR/nuit.conf"
+
+demarrer() { pkill -x wlsunset 2>/dev/null || true; setsid wlsunset -s "$COUCHER" -S "$LEVER" -t "$CHAUD" -T 6500 >/dev/null 2>&1 & }
+arreter() { pkill -x wlsunset 2>/dev/null || true; }
+note() { command -v notify-send >/dev/null && notify-send -a Plume "Lumière du soir" "$1" || true; }
+
+mkdir -p "$DIR"
+case "${1:-}" in
+--demarrage) [ "$(cat "$ETAT" 2>/dev/null)" = on ] && demarrer; exit 0 ;;
+on) echo on > "$ETAT"; demarrer; note "Activée : écran plus chaud de $COUCHER à $LEVER." ;;
+off) echo off > "$ETAT"; arreter; note "Désactivée." ;;
+"") if [ "$(cat "$ETAT" 2>/dev/null)" = on ]; then exec "$0" off; else exec "$0" on; fi ;;
+*) echo "Usage : plume-nuit [on | off]" >&2; exit 2 ;;
+esac

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VPN
+Comment=WireGuard, OpenVPN, VPN d'entreprise (AnyConnect, GlobalProtect…)
+Exec=plume-vpn
+Icon=network-vpn
+Terminal=false
+Categories=Settings;
+Keywords=vpn;wireguard;openvpn;anyconnect;globalprotect;entreprise;

@@ -19,6 +19,20 @@ ibus ibus-libpinyin # chinois pinyin
 pipewire wireplumber alsa-pipewire
 bluez
 xdg-utils
+# clés USB et disques externes : montage sans mot de passe (polkit, groupe storage), automatique (udiskie)
+udisks2 polkit gvfs udiskie
+# portails Wayland : partage d'écran (wlr), fenêtres « Ouvrir un fichier » (gtk)
+xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk
+# réglage des écrans (plume-ecrans) ; état de Secure Boot (installateur)
+wdisplays jq mokutil
+# imprimantes (sans pilote : IPP Everywhere) et scanners du réseau ou USB
+cups cups-filters avahi nss-mdns system-config-printer sane sane-airscan simple-scan
+# batterie (modes économie / performance), firmwares du PC (BIOS, SSD…)
+power-profiles-daemon upower fwupd fwupd-efi
+# VPN : WireGuard, OpenVPN, entreprise (AnyConnect, GlobalProtect, Fortinet…)
+wireguard-tools openvpn openconnect vpnc-scripts
+# lumière du soir, installateur graphique
+wlsunset yad
 # --- Applications du quotidien ---
 firefox firefox-i18n-fr mpv imv zathura zathura-pdf-mupdf pcmanfm micro
 # --- Plume (dépôt .xbps Plume) ---

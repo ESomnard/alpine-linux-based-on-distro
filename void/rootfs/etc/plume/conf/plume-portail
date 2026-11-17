@@ -1,0 +1,34 @@
+#!/bin/sh
+# Plume (Void) — wifi d'hôtel, de gare, d'aéroport… (« portail captif ») : quand le réseau
+# demande de se connecter sur une page web, Plume l'ouvre tout seul dans Firefox.
+#   plume-portail             vérifie maintenant (et ouvre la page s'il le faut)
+#   plume-portail --surveiller  vérifie toutes les 30 s (lancé par sway)
+# Même méthode que Firefox : on demande une petite page connue (detectportal.firefox.com) ;
+# si on reçoit autre chose que « success », c'est qu'un portail s'interpose.
+set -u
+URL=http://detectportal.firefox.com/success.txt
+
+etat() {
+	ip route 2>/dev/null | grep -q '^default' || { echo hors-ligne; return; }
+	r=$(curl -s -m 6 -o - -w '\n%{http_code}' "$URL" 2>/dev/null) || { echo hors-ligne; return; }
+	corps=$(printf '%s' "$r" | head -1) code=$(printf '%s' "$r" | tail -1)
+	if [ "$code" = 200 ] && [ "$corps" = success ]; then echo ok; else echo portail; fi
+}
+
+ouvrir() {
+	command -v notify-send >/dev/null && notify-send -a Plume "Wifi" "Ce réseau demande de se connecter : ouverture de la page." || true
+	setsid firefox --new-window http://detectportal.firefox.com/canonical.html >/dev/null 2>&1 &
+}
+
+case "${1:-}" in
+"") e=$(etat); echo "Réseau : $e"; [ "$e" = portail ] && ouvrir; exit 0 ;;
+--surveiller)
+	avant=ok
+	while :; do
+		e=$(etat)
+		[ "$e" = portail ] && [ "$avant" != portail ] && ouvrir
+		avant=$e
+		sleep 30
+	done ;;
+*) echo "Usage : plume-portail [--surveiller]" >&2; exit 2 ;;
+esac

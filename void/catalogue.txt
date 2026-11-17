@@ -75,7 +75,7 @@ xemu | Jeux | | app.xemu.xemu | | Émulateur Xbox (première génération)
 Flycast | Jeux | | org.flycast.Flycast | | Émulateur Dreamcast
 
 # --- Développement ---
-Visual Studio Code | Développement | | com.visualstudio.code | | Éditeur de code de Microsoft
+Visual Studio Code | Développement | vscode | com.visualstudio.code | code-oss | Éditeur de code ; la version Void (native) voit tes compilateurs et Docker, extensions via Open VSX
 Geany | Développement | geany | org.geany.Geany | | Éditeur de code léger et rapide
 Neovim | Développement | neovim | | nvim | Éditeur de texte du terminal, extensible
 Git | Développement | git | | | Gestion de versions
@@ -102,3 +102,9 @@ Bluetooth (blueman) | Système | blueman | | | Appareils Bluetooth
 Imprimantes | Système | system-config-printer | | | Ajouter et régler des imprimantes
 GParted | Système | gparted | | | Partitionner les disques
 Disques | Système | gnome-disk-utility | | | Disques, clés USB et images disque
+Pilotes HP (HPLIP) | Système | hplip | | | Imprimantes et scanners HP anciens (les récents marchent sans pilote)
+Pilotes Epson | Système | epson-inkjet-printer-escpr | | | Imprimantes jet d'encre Epson
+Pilotes Brother laser | Système | brother-brlaser | | | Imprimantes laser Brother
+Pilotes Samsung / Xerox | Système | splix | | | Imprimantes laser Samsung et Xerox
+Pilotes Gutenprint | Système | gutenprint | | | Centaines d'imprimantes (Canon, Epson, HP…) anciennes
+Pilotes Foomatic | Système | foomatic-db | | | Base de pilotes d'imprimantes classiques

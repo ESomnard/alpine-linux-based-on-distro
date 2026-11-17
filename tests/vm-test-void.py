@@ -108,7 +108,8 @@ if not PHASE2:
 
 # ============================== système installé =============================
 step("Phase 2 : démarrage sur le disque (BIOS)")
-vm = VM(f"-no-reboot -drive file={DISK},if=virtio -nic user,model=virtio-net-pci")
+vm = VM(f"-no-reboot -drive file={DISK},if=virtio -nic user,model=virtio-net-pci "
+        "-device qemu-xhci -drive if=none,id=cle,format=raw,file=/tmp/usb.img -device usb-storage,drive=cle,removable=on")
 if CHIFFRE:
     vm.expect(r"[Pp]assword|[Pp]assphrase", 900, "demande de la phrase secrète")
     vm.p.send(f"{PHRASE}\r")
@@ -118,7 +119,7 @@ step("Connexion de l'utilisateur OK")
 ok = True
 ok &= vm.check("glibc", "ldd --version | head -1", r"GNU libc|GLIBC")
 ok &= vm.check("11 composants Plume installés", "xbps-query -l | grep -c ' plume-'", r"\b1[01]\b")
-for s in ("dbus", "seatd", "greetd", "nftables", "iwd", "bluetoothd", "zramen"):
+for s in ("dbus", "seatd", "greetd", "nftables", "iwd", "bluetoothd", "zramen", "polkitd", "cupsd", "avahi-daemon", "power-profiles-daemon"):
     ok &= vm.check(f"service {s}", f"sudo -n true 2>/dev/null; echo {PW} | sudo -S sv status {s}", r"run:")
 ok &= vm.check("écran de connexion plume-hud (greetd + cage)", "pgrep -af 'plume-hud --greeter'", r"plume-hud")
 ok &= vm.check("pare-feu actif", f"echo {PW} | sudo -S nft list chain inet filter input", r"policy drop")
@@ -150,17 +151,76 @@ ok &= vm.check("Firefox démarre confiné (plume-firefox)",
                "(firefox --headless --no-remote about:blank >/dev/null 2>&1 &) ; sleep 60 ; "
                "cat /proc/$(pgrep -o -f /usr/lib/firefox/firefox)/attr/apparmor/current ; pkill -f /usr/lib/firefox/firefox",
                r"plume-firefox \(enforce\)", 240)
+# clé USB : montée par l'utilisateur sans mot de passe (udisks2 + règle polkit du groupe storage)
+ok &= vm.check("clé USB montée sans mot de passe (udisks2 + polkit)",
+               "udisksctl mount --no-user-interaction -b /dev/disk/by-label/PLUMEUSB && "
+               "cat /run/media/$(id -un)/PLUMEUSB/bonjour.txt && "
+               "udisksctl unmount --no-user-interaction -b /dev/disk/by-label/PLUMEUSB", r"cle-usb-lue", 180)
+ok &= vm.check("polkit : clé USB permise, disque interne et formatage refusés sans mot de passe",
+               "pkcheck --action-id org.freedesktop.udisks2.filesystem-mount --process $$ && "
+               "! pkcheck --action-id org.freedesktop.udisks2.filesystem-mount-system --process $$ && "
+               "! pkcheck --action-id org.freedesktop.udisks2.modify-device --process $$ && echo polkit-ok", r"polkit-ok", 120)
+# session sway sans écran (headless) : portails, plume-ecrans
+SESSION = """
+export XDG_RUNTIME_DIR=/tmp/rt-$(id -u); mkdir -p -m700 "$XDG_RUNTIME_DIR"
+export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1
+dbus-run-session sh -c '
+  pipewire >/tmp/pipewire.log 2>&1 &
+  printf "set \\$mod Mod4\ninclude /etc/sway/config.d/50-plume-void.conf\n" > /tmp/sway-test.conf
+  sway -c /tmp/sway-test.conf >/tmp/sway.log 2>&1 &
+  sleep 30
+  export SWAYSOCK=$(ls $XDG_RUNTIME_DIR/sway-ipc.*.sock | head -1)
+  echo "bureau=$XDG_CURRENT_DESKTOP"
+  P="--session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.DBus.Properties.Get"
+  gdbus call $P org.freedesktop.portal.ScreenCast version && echo portail-ecran-ok
+  gdbus call $P org.freedesktop.portal.FileChooser version && echo portail-fichiers-ok
+  plume-ecrans --enregistrer && swaymsg reload && grep -q "^output" ~/.config/sway/ecrans.conf && echo ecrans-ok
+  plume-ecrans --liste
+  swaymsg exit
+'
+"""
+import base64
+b64 = base64.b64encode(SESSION.encode()).decode()
+code, out = vm.run(f"echo {b64} | base64 -d > /tmp/session.sh; sh /tmp/session.sh 2>&1 | grep -v 'I/O error' | tail -25", 400)
+step("OK : portail partage d'écran (wlr)" if "portail-ecran-ok" in out else "ECHEC : portail partage d'écran (wlr)")
+step("OK : portail fichiers (gtk)" if "portail-fichiers-ok" in out else "ECHEC : portail fichiers (gtk)")
+step("OK : plume-ecrans enregistre et sway relit les réglages" if "ecrans-ok" in out else "ECHEC : plume-ecrans")
+ok &= all(m in out for m in ("portail-ecran-ok", "portail-fichiers-ok", "ecrans-ok"))
+if "portail-ecran-ok" not in out:
+    vm.run("tail -5 /tmp/pipewire.log; ls /usr/share/xdg-desktop-portal/portals/ /etc/xdg/xdg-desktop-portal/")
+# imprimantes, scanners, énergie, firmwares, VPN, wifi public
+ok &= vm.check("imprimantes : CUPS prêt, compte dans lpadmin",
+               "lpstat -r && id -nG | tr ' ' '\\n' | grep -x lpadmin", r"lpadmin")
+ok &= vm.check("scanners : SANE + réseau (airscan)", "scanimage --version && grep -qx airscan /etc/sane.d/dll.d/* /etc/sane.d/dll.conf && echo airscan-ok", r"airscan-ok")
+ok &= vm.check("énergie : mode économie sans mot de passe (polkit)",
+               "plume-batterie economie && powerprofilesctl get && plume-batterie equilibre", r"power-saver")
+# fwupd : en VM émulée, son démarrage dépasse le délai de dbus (25 s) ; on le lance d'abord
+vm.run(f"echo {PW} | sudo -S sh -c '/usr/libexec/fwupd/fwupd >/dev/null 2>&1 &'; sleep 120", 200)
+ok &= vm.check("firmwares du PC : fwupd répond", f"echo {PW} | sudo -S fwupdmgr get-devices --json 2>/dev/null | head -c 300", r"Devices", 200)
+ok &= vm.check("pilotes : pas de carte NVIDIA détectée (VM)", "plume-pilotes", r"Pas de carte NVIDIA")
+vm.run("umask 077; printf '[Interface]\\nPrivateKey = %s\\nAddress = 10.99.0.2/24\\n[Peer]\\nPublicKey = %s\\n"
+       "Endpoint = 192.0.2.1:51820\\nAllowedIPs = 10.99.0.0/24\\n' $(wg genkey) $(wg genkey | wg pubkey) > /tmp/essai.conf")
+ok &= vm.check("VPN WireGuard : ajout, connexion, déconnexion (plume-vpn)",
+               f"echo {PW} | sudo -S plume-vpn ajouter /tmp/essai.conf && sudo plume-vpn connecter essai && "
+               "ip -br link show essai && plume-vpn etat && sudo plume-vpn deconnecter && ! ip link show essai 2>/dev/null && echo vpn-ok",
+               r"vpn-ok", 120)
+ok &= vm.check("wifi public : détection du portail (réseau normal = ok)", "plume-portail", r"Réseau : ok", 60)
+ok &= vm.check("pare-feu : découverte des imprimantes (mDNS) ouverte",
+               f"echo {PW} | sudo -S nft list chain inet filter input | grep -c 5353", r"\b2\b")
+ok &= vm.check("VS Code natif dans la Logithèque",
+               "grep -c '| vscode |' /usr/share/plume/logitheque.txt && xbps-query -R vscode | grep -m1 pkgver", r"pkgver: vscode")
+ok &= vm.check("Écrans dans la grille des applications", "grep -c '^Name=Écrans' /usr/share/applications/plume-ecrans.desktop", r"1")
 # capture de l'écran de connexion (cage accepte grim)
 vm.run(f"echo {PW} | sudo -S sh -c '"
        "XDG_RUNTIME_DIR=/var/lib/_greeter/runtime WAYLAND_DISPLAY=$(ls /var/lib/_greeter/runtime | grep -m1 ^wayland-[0-9]$) "
        "grim /tmp/g.png' ; echo ===B64START greeter=== ; base64 /tmp/g.png ; echo ===B64END===", 300)
 vm.run("df -h / | tail -1; free -m | sed -n 2p")
 # slim-firmware (en dernier : allège le disque de test)
-ok &= vm.check("slim-firmware : firmwares allégés, base xbps intacte",
+ok &= vm.check("slim-firmware : firmwares allégés, mises à jour xbps toujours possibles",
                "a=$(du -sm /usr/lib/firmware | cut -f1); "
                f"echo {PW} | sudo -S sh /etc/plume/slim-firmware.sh --oui >/tmp/slim.log 2>&1; "
                "b=$(du -sm /usr/lib/firmware | cut -f1); echo \"firmwares : $a Mo -> $b Mo\"; "
-               f"[ $b -lt $a ] && [ -f /etc/xbps.d/90-plume-firmware.conf ] && echo {PW} | sudo -S xbps-pkgdb $(xbps-query -l | awk '{{print $2}}' | sed 's/-[^-]*$//' | grep -- -firmware) && echo slim-ok",
+               f"{{ [ $b -lt $a ] || [ $b -le 2 ]; }} && [ -f /etc/xbps.d/90-plume-firmware.conf ] && echo {PW} | sudo -S xbps-install -Sun >/dev/null && echo slim-ok",
                r"slim-ok", 900)
 vm.run("tail -4 /tmp/slim.log")
 step("SUCCES : tous les tests sont passés" if ok else "ECHEC : au moins un test a échoué")

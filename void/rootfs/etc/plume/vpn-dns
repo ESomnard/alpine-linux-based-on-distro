@@ -1,0 +1,17 @@
+#!/bin/sh
+# Plume — OpenVPN : utilise les serveurs DNS donnés par le VPN (via resolvconf), et les retire après.
+case "${script_type:-}" in
+up)
+	i=1
+	while :; do
+		eval o=\${foreign_option_$i:-}
+		[ -n "$o" ] || break
+		case "$o" in
+		"dhcp-option DNS "*) echo "nameserver ${o#dhcp-option DNS }" ;;
+		"dhcp-option DOMAIN "*) echo "search ${o#dhcp-option DOMAIN }" ;;
+		esac
+		i=$((i + 1))
+	done | resolvconf -a "$dev.openvpn" ;;
+down) resolvconf -d "$dev.openvpn" 2>/dev/null || true ;;
+esac
+exit 0

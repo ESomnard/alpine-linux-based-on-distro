@@ -1,0 +1,13 @@
+// Plume — clés USB et disques externes : les membres du groupe « storage » peuvent les
+// monter, démonter, éjecter et déverrouiller (chiffrés) sans mot de passe.
+// Les disques internes et le formatage demandent toujours le mot de passe administrateur.
+polkit.addRule(function(action, subject) {
+	var permis = [
+		"org.freedesktop.udisks2.filesystem-mount",
+		"org.freedesktop.udisks2.encrypted-unlock",
+		"org.freedesktop.udisks2.eject-media",
+		"org.freedesktop.udisks2.power-off-drive"
+	];
+	if (permis.indexOf(action.id) >= 0 && subject.isInGroup("storage"))
+		return polkit.Result.YES;
+});

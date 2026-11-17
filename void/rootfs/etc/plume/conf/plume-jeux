@@ -38,13 +38,10 @@ L
 }
 
 pilote_nvidia() {
+	# NVIDIA : le bon pilote officiel est choisi et installé tout seul (plume-pilotes)
 	grep -qs 0x10de /sys/bus/pci/devices/*/vendor || return 0
-	echo
-	echo "!! Carte graphique NVIDIA détectée."
-	echo "   Le pilote libre (nouveau) est lent pour jouer. Pilote NVIDIA officiel :"
-	echo "     sudo xbps-install -S nvidia nvidia-libs-32bit     (cartes récentes, GTX 900 et plus)"
-	echo "     sudo xbps-install -S nvidia470 nvidia470-libs-32bit (GTX 600/700)"
-	echo "   puis redémarre."
+	echo; echo "==> Carte NVIDIA : pilote officiel"
+	plume-pilotes --installer || echo "Pilote NVIDIA non installé : voir « plume-pilotes »."
 }
 
 pc() {

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Énergie
+Comment=Batterie et mode économie / performance
+Exec=plume-batterie
+Icon=battery
+Terminal=false
+Categories=Settings;
+Keywords=batterie;énergie;économie;performance;autonomie;battery;power;

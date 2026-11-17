@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Installer Plume
+Comment=Installer Plume Linux sur ce PC
+Exec=sh /etc/plume/installer-graphique.sh
+Icon=system-software-install
+Terminal=false
+Categories=System;
+Keywords=installer;installation;disque;install;

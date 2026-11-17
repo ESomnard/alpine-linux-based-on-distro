@@ -1,0 +1,4 @@
+# Plume (Void) — découverte des imprimantes et scanners du réseau local (mDNS / Bonjour).
+# Seuls les messages de découverte (adresses multicast locales) sont acceptés.
+add rule inet filter input udp dport 5353 ip daddr 224.0.0.251 accept comment "mDNS : imprimantes et scanners"
+add rule inet filter input udp dport 5353 ip6 daddr ff02::fb accept comment "mDNS IPv6"

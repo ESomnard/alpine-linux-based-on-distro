@@ -177,6 +177,14 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Profils AppArmor Plume : Firefox, mpv, imv, Zathura | ✅ Testé en VM : 4 profils en mode enforce ; Firefox démarre confiné ; une appli confinée lit tes documents mais pas `~/.ssh`, ne peut ni modifier `.bashrc` ni exécuter un fichier téléchargé ; Zathura (PDF) n'a pas Internet |
 | `plume-secureboot` (UKI dracut signée), pack émulation | 🟡 Codés, pas testés |
 | Pack jeux (`plume-jeux`) : Steam natif + 32 bits, Heroic (Epic, GOG), Vulkan ; manettes (`plume-manette`) ; émulateurs Switch et PS4 | 🟡 Testé dans un Void vierge : tous les paquets existent (plus de 200 à installer avec le 32 bits), applis Flathub vérifiées (Heroic, ProtonUp-Qt, Ryujinx, shadPS4), règles manettes et groupe `input` posés ; vrais jeux et vraies manettes non testés |
+| Clés USB et disques externes (udisks2, polkit, udiskie) | ✅ Testé en VM : une clé USB est montée et lue sans mot de passe ; disque interne et formatage refusés sans mot de passe |
+| Portails Wayland (partage d'écran, fichiers) | ✅ Testé en VM (session sway sans écran) : portails ScreenCast (wlr) et FileChooser (gtk) répondent ; vrai partage en réunion non testé |
+| Écrans (`plume-ecrans`), VS Code natif | ✅ Testé en VM : réglages enregistrés puis relus par sway ; VS Code (paquet `vscode`) proposé dans la Logithèque |
+| Imprimantes, scanners | ✅ Testé en VM : CUPS et Avahi actifs, compte dans `lpadmin`, SANE + airscan, pare-feu ouvert pour la découverte (mDNS) ; vraie imprimante non testée |
+| Énergie (`plume-batterie`), firmwares (`plume-maj --bios`) | ✅ Testé en VM : mode économie sans mot de passe ; fwupd répond (en VM, son 1er démarrage est lent) |
+| VPN (`plume-vpn`) | ✅ Testé en VM : tunnel WireGuard ajouté, connecté, déconnecté (bug de nom trouvé et corrigé) ; OpenVPN et VPN d'entreprise non testés (il faut un serveur) |
+| Pilotes NVIDIA (`plume-pilotes`), wifi public (`plume-portail`) | ✅ Choix du pilote vérifié sur 10 cartes (RTX 40 → GT 430) ; détection du portail testée en VM (réseau normal) ; vrai portail non testé |
+| Lumière du soir (`plume-nuit`), installateur graphique | 🟡 Codés, pas encore vus à l'écran |
 | UEFI, wifi, son, Bluetooth, veille sur un vrai PC | ⚪ À tester |
 | `slim-firmware.sh` (alléger les firmwares) | ✅ Testé en VM : 667 Mo → 1 Mo ; seuls les fichiers utiles à ton matériel restent, et des règles `noextract` de xbps empêchent les mises à jour de remettre les autres (`--restaurer` remet tout). Bug trouvé et corrigé : noms de firmwares avec espaces |
 
@@ -206,6 +214,23 @@ https://github.com/ESomnard/alpine-linux-based-on-distro/releases/latest
 - `plume-void-…-x86_64.iso` : session live `plume` / `voidlinux`, puis dans un terminal
   `sudo sh /etc/plume/install.sh` ;
 - `SHA256SUMS` : `sha256sum -c SHA256SUMS` pour vérifier le téléchargement.
+
+#### Secure Boot (PC récents)
+
+Plume n'a pas de chargeur de démarrage signé par Microsoft (contrairement à Ubuntu) : avec Secure Boot
+actif, la clé USB ne démarre pas. Ce n'est pas une faille : Plume peut ensuite réactiver Secure Boot
+avec **tes propres clés**, ce qui est encore plus strict (seul ce que tu as signé démarre).
+
+1. **Avant d'installer** : dans le BIOS/UEFI (touche F2, Suppr ou F10 au démarrage), désactive
+   *Secure Boot* et démarre sur la clé USB.
+2. **Après l'installation** (Plume Void) : dans le BIOS, section Secure Boot, choisis
+   « Reset to Setup Mode » ou « Clear Secure Boot keys », redémarre sur Plume, puis :
+   ```sh
+   sudo plume-secureboot activer   # crée tes clés, les inscrit (Microsoft gardées), signe le noyau
+   ```
+3. Retourne dans le BIOS et **active Secure Boot**. État à tout moment : `plume-secureboot`.
+
+Les mises à jour du noyau sont signées automatiquement. L'installateur rappelle ces étapes à la fin.
 
 ### Construire et publier (mainteneur)
 
@@ -715,6 +740,26 @@ Chaque émulateur est aussi dans la Logithèque (catégorie Jeux). Les jeux, BIO
 ne sont pas fournis : utilise uniquement tes propres copies (Switch, PS3, PS4 : fichiers système de
 ta console).
 
+### Matériel, réseau et réglages (Plume Void)
+
+Tout est dans la grille des applications (`Super + a`) ou en une commande :
+
+| Besoin | Comment | Détails |
+|---|---|---|
+| **Clé USB, disque externe** | Branche-la : elle s'ouvre toute seule | Montée automatiquement (udiskie) avec une notification, sans mot de passe pour les clés et disques externes ; les disques internes et le formatage demandent le mot de passe administrateur (règle polkit, groupe `storage`) |
+| **Partage d'écran** (Teams, Meet, Zoom, Discord, OBS) | Dans l'appli : « Partager l'écran » | Portails Wayland : `xdg-desktop-portal-wlr` (écran ; s'il y en a plusieurs, clique sur celui à partager) et `-gtk` (fenêtres « Ouvrir un fichier » des applis Flatpak) |
+| **Écrans** : résolution, zoom 4K, 2e écran, vidéoprojecteur | **Écrans** ou `plume-ecrans` | Fenêtre de réglage (wdisplays) ; les réglages sont gardés au redémarrage, par modèle d'écran (`~/.config/sway/ecrans.conf`). Un écran éteint n'est jamais enregistré éteint : pas d'écran noir en débranchant l'autre. `plume-ecrans --oublier` : réglages automatiques |
+| **VS Code** | Logithèque → Visual Studio Code | Version Void (native) proposée en premier : son terminal voit tes compilateurs et Docker. Extensions via Open VSX |
+| **Imprimante** | **Paramètres d'impression** | Imprimantes réseau et USB récentes reconnues sans pilote (IPP Everywhere : CUPS + Avahi) ; pilotes HP, Epson, Brother, Samsung, Gutenprint dans la Logithèque (catégorie Système) |
+| **Scanner** | **Numériser** (Simple Scan) | Scanners réseau sans pilote (sane-airscan) et USB (SANE) |
+| **Batterie** | **Énergie** ou `plume-batterie` | Modes Économie / Équilibré / Performance sans mot de passe, état de la batterie ; le % est aussi dans la barre |
+| **BIOS et firmwares** (SSD, dock, Thunderbolt…) | `plume-maj --bios` | fwupd et le catalogue des fabricants (LVFS) ; redémarrage pour appliquer |
+| **VPN** | **VPN** ou `plume-vpn` | `sudo plume-vpn ajouter fichier.conf` (WireGuard) ou `.ovpn` (OpenVPN) ; VPN d'entreprise : `sudo plume-vpn entreprise travail vpn.entreprise.fr anyconnect` (aussi `gp` GlobalProtect, `fortinet`, `pulse`). Puis connexion depuis le menu |
+| **Wifi d'hôtel, de gare** | Rien à faire | La page de connexion du réseau s'ouvre toute seule dans Firefox (`plume-portail`) |
+| **Lumière du soir** | `Super + n`, **Lumière du soir** ou `plume-nuit` | Écran plus chaud de 20 h à 7 h 30 (`~/.config/plume/nuit.conf`) |
+| **Carte NVIDIA** | `sudo plume-pilotes --installer` (fait par `plume-jeux`) | RTX 20 et plus : pilote `nvidia` ; GTX 900 à 16 : `nvidia580` ; plus anciennes : pilote libre gardé (les pilotes officiels anciens ne font pas tourner sway) |
+| **Installer Plume** (session live) | **Installer Plume** | Installateur graphique : disque, compte, clavier, chiffrement à la souris, puis l'installation se déroule dans le terminal |
+
 ### Toutes les applications (plume-lanceur)
 
 `Super + a` (comme GNOME), `Super + d`, `◆ PLUME` dans la barre ou `⣿` au bout du dock : toutes les
@@ -850,29 +895,29 @@ Comparaison avec Ubuntu : ce qui manque vraiment au quotidien.
 
 | Priorité | Manque | Ce qui coince sans | Ce qu'il faut |
 |---|---|---|---|
-| 🔴 | **Clés USB et disques externes** | Une clé branchée ne s'ouvre pas dans le gestionnaire de fichiers | udisks2, polkit, gvfs, montage automatique |
-| 🔴 | **Portails Wayland** | Pas de partage d'écran (Discord, Meet, Teams dans Firefox) ; fenêtres « Ouvrir un fichier » cassées dans les applis Flatpak (Heroic, Steam) | xdg-desktop-portal-wlr et -gtk |
-| 🔴 | **Secure Boot sans réglage** | Sur un PC récent, Plume ne démarre pas tant que Secure Boot n'est pas désactivé ou que tes clés ne sont pas inscrites ; Ubuntu démarre directement grâce à un chargeur signé par Microsoft (shim) | Marche à suivre claire dans l'installateur, ou shim |
-| 🔴 | **Réglage des écrans** | Aucun moyen simple de régler la résolution, le zoom (écran 4K), un 2e écran ou un vidéoprojecteur | Panneau HUD « écrans » (wlr-randr / kanshi) |
-| 🟠 | **Imprimante et scanner** | Impossible d'imprimer ou de numériser | CUPS + pilotes, sane, panneau simple |
-| 🟠 | **Batterie** | Pas de mode économie / performance | power-profiles-daemon ou TLP, affichage dans la barre |
-| 🟠 | **Mise à jour du BIOS et des firmwares** | Le BIOS et les firmwares du PC ne sont jamais mis à jour | fwupd |
-| 🟠 | **Installateur graphique** | `install.sh` se lance dans un terminal : difficile pour un débutant | Installateur HUD à la souris |
-| 🟠 | **Wifi d'hôtel ou de gare** | La page de connexion du wifi public ne s'ouvre pas toute seule | Détection du portail captif et ouverture de Firefox |
-| 🟠 | **Lumière du soir** | Pas de filtre de lumière bleue | wlsunset + bouton dans la barre |
+| ✅ fait| **Clés USB et disques externes** | Une clé branchée ne s'ouvre pas dans le gestionnaire de fichiers | udisks2, polkit, gvfs, montage automatique |
+| ✅ fait| **Portails Wayland** | Pas de partage d'écran (Discord, Meet, Teams dans Firefox) ; fenêtres « Ouvrir un fichier » cassées dans les applis Flatpak (Heroic, Steam) | xdg-desktop-portal-wlr et -gtk |
+| ✅ fait| **Secure Boot sans réglage** | Sur un PC récent, Plume ne démarre pas tant que Secure Boot n'est pas désactivé ou que tes clés ne sont pas inscrites ; Ubuntu démarre directement grâce à un chargeur signé par Microsoft (shim) | Marche à suivre claire dans l'installateur, ou shim |
+| ✅ fait| **Réglage des écrans** | Aucun moyen simple de régler la résolution, le zoom (écran 4K), un 2e écran ou un vidéoprojecteur | Panneau HUD « écrans » (wlr-randr / kanshi) |
+| ✅ fait| **Imprimante et scanner** | Impossible d'imprimer ou de numériser | CUPS + pilotes, sane, panneau simple |
+| ✅ fait| **Batterie** | Pas de mode économie / performance | power-profiles-daemon ou TLP, affichage dans la barre |
+| ✅ fait| **Mise à jour du BIOS et des firmwares** | Le BIOS et les firmwares du PC ne sont jamais mis à jour | fwupd |
+| ✅ fait| **Installateur graphique** | `install.sh` se lance dans un terminal : difficile pour un débutant | Installateur HUD à la souris |
+| ✅ fait| **Wifi d'hôtel ou de gare** | La page de connexion du wifi public ne s'ouvre pas toute seule | Détection du portail captif et ouverture de Firefox |
+| ✅ fait| **Lumière du soir** | Pas de filtre de lumière bleue | wlsunset + bouton dans la barre |
 | 🟢 | **Retour en arrière** après une mauvaise mise à jour | Void évolue en continu : une mise à jour ratée peut casser le système | Instantanés btrfs, ou ancien noyau au choix dans GRUB |
 | 🟢 | **Sauvegarde** des fichiers | Pas d'outil de sauvegarde simple | Équivalent de Déjà Dup |
-| 🟢 | **VPN** en un clic | Il faut tout configurer à la main | WireGuard / OpenVPN dans un panneau |
+| ✅ fait| **VPN** en un clic | Il faut tout configurer à la main | WireGuard / OpenVPN dans un panneau |
 | 🟢 | **Accessibilité** | Ni loupe ni lecteur d'écran | Loupe, lecteur d'écran, clavier à l'écran hors du terminal |
 
 #### Pour le jeu vidéo et le développement pro
 
 | Priorité | Usage | Ce qui coince | Ce qu'il faut |
 |---|---|---|---|
-| 🔴 | Dev pro, jeux | **Partage d'écran** en réunion (Teams, Meet, Zoom, Slack) ou en stream (Discord, OBS) impossible | Portails Wayland (ligne 🔴 ci-dessus) |
-| 🔴 | Dev pro | **VS Code** : seule la version Flatpak est dans la Logithèque ; son terminal intégré ne voit ni tes compilateurs ni Docker | Version native (`vscode` dans Void) dans la Logithèque |
-| 🟠 | Jeux | **Carte NVIDIA** : pilote officiel à installer à la main (`plume-jeux` donne seulement la commande) | Détection et installation automatiques du bon pilote (`nvidia` ou `nvidia470` + 32 bits) |
-| 🟠 | Dev pro | **VPN d'entreprise** (OpenVPN, Cisco AnyConnect, GlobalProtect, WireGuard) souvent obligatoire au travail | Paquets VPN + panneau (ligne VPN ci-dessus, à remonter en 🟠) |
+| ✅ fait| Dev pro, jeux | **Partage d'écran** en réunion (Teams, Meet, Zoom, Slack) ou en stream (Discord, OBS) impossible | Portails Wayland (ligne 🔴 ci-dessus) |
+| ✅ fait| Dev pro | **VS Code** : seule la version Flatpak est dans la Logithèque ; son terminal intégré ne voit ni tes compilateurs ni Docker | Version native (`vscode` dans Void) dans la Logithèque |
+| ✅ fait| Jeux | **Carte NVIDIA** : pilote officiel à installer à la main (`plume-jeux` donne seulement la commande) | Détection et installation automatiques du bon pilote (`nvidia` ou `nvidia470` + 32 bits) |
+| ✅ fait| Dev pro | **VPN d'entreprise** (OpenVPN, Cisco AnyConnect, GlobalProtect, WireGuard) souvent obligatoire au travail | Paquets VPN + panneau (ligne VPN ci-dessus, à remonter en 🟠) |
 | 🟢 | Jeux | **HDR** : sway ne le gère pas encore bien | Attendre sway, ou gamescope en HDR |
 | 🟢 | Dev pro | **Pas de systemd** : quelques outils et tutoriels supposent `systemctl` | Distrobox (Ubuntu dans un conteneur) ; Docker marche déjà avec runit |
 | — | Jeux | **Anti-triche noyau** (Valorant, Fortnite, Call of Duty…) | Rien à faire : ces jeux ne marchent sur aucune distro Linux |

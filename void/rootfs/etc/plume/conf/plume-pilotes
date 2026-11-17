@@ -1,0 +1,69 @@
+#!/bin/sh
+# Plume (Void) — pilotes graphiques : détecte la carte et installe le bon pilote.
+#   plume-pilotes             ce qui est détecté et ce qui serait installé
+#   sudo plume-pilotes --installer   installe le pilote NVIDIA officiel si c'est utile
+#
+# Intel et AMD : pilotes libres (Mesa), déjà installés, rien à faire.
+# NVIDIA : sway (le bureau Plume) ne marche qu'avec les pilotes officiels récents (GBM) :
+#   - RTX 20 et plus récentes (Turing →)       : nvidia      (série 595)
+#   - GTX 900, 10, 16 / Titan V (Maxwell → Volta) : nvidia580 (dernière série pour elles)
+#   - plus anciennes (GTX 600/700 et avant)    : on garde le pilote libre « nouveau »
+#     (le pilote officiel de ces cartes ne sait pas faire tourner sway : écran noir).
+set -eu
+
+# carte NVIDIA : identifiant PCI (ex. 0x2684) de la 1re carte graphique NVIDIA
+nvidia_id() {
+	for d in /sys/bus/pci/devices/*; do
+		[ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+		case "$(cat "$d/class" 2>/dev/null)" in 0x03*) cat "$d/device"; return 0 ;; esac
+	done
+	return 1
+}
+
+# paquet du pilote selon la génération (plages d'identifiants PCI de NVIDIA)
+paquet_pour() {
+	id=$(printf '%d' "$1")
+	if [ "$id" -ge $((0x1E00)) ]; then echo nvidia
+	elif [ "$id" -ge $((0x1340)) ]; then echo nvidia580
+	else echo ""; fi
+}
+
+ID=$(nvidia_id || true)
+if [ -z "$ID" ]; then
+	echo "Pas de carte NVIDIA : les pilotes libres (Intel, AMD) sont déjà là, rien à faire."
+	exit 0
+fi
+P=$(paquet_pour "$ID")
+NOM=$(lspci -d "10de:${ID#0x}" 2>/dev/null | sed 's/^[^:]*: //' | head -1)
+echo "Carte NVIDIA détectée : ${NOM:-$ID}"
+if [ -z "$P" ]; then
+	echo "Carte trop ancienne pour le pilote officiel avec sway : le pilote libre « nouveau » est gardé."
+	exit 0
+fi
+echo "Pilote officiel adapté : $P (+ bibliothèques 32 bits pour Steam)"
+[ "${1:-}" = --installer ] || { echo "Pour l'installer : sudo plume-pilotes --installer"; exit 0; }
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+xbps-install -Sy void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree
+xbps-install -Sy
+xbps-install -y "$P" "$P-libs-32bit" 2>/dev/null || xbps-install -y "$P"
+
+# mode noyau (KMS) : nécessaire aux bureaux Wayland ; repris par l'initramfs (dracut)
+mkdir -p /etc/modprobe.d
+printf '# Plume — pilote NVIDIA pour Wayland (sway)\noptions nvidia-drm modeset=1 fbdev=1\n' \
+	> /etc/modprobe.d/plume-nvidia.conf
+# sway refuse les pilotes NVIDIA sans --unsupported-gpu : petit lanceur prioritaire (/usr/local/bin)
+mkdir -p /usr/local/bin
+cat > /usr/local/bin/sway <<'S'
+#!/bin/sh
+# Plume — sway avec le pilote NVIDIA officiel (installé par plume-pilotes)
+if [ -d /sys/module/nvidia_drm ]; then
+	export WLR_NO_HARDWARE_CURSORS=1
+	exec /usr/bin/sway --unsupported-gpu "$@"
+fi
+exec /usr/bin/sway "$@"
+S
+chmod 755 /usr/local/bin/sway
+# initramfs refait pour tous les noyaux installés (pilote + options)
+xbps-reconfigure -f "$(xbps-query -l | awk '{print $2}' | grep -E '^linux[0-9.]+-[0-9]' | sed 's/-[^-]*$//' | head -1)" >/dev/null 2>&1 || true
+echo "Pilote $P installé. Redémarre pour l'utiliser."

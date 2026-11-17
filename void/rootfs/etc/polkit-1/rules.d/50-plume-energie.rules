@@ -1,0 +1,9 @@
+// Plume — changer de mode d'énergie (économie / équilibré / performance) sans mot de passe.
+// (Sans elogind, polkit ne sait pas qui est « devant l'écran » : on l'autorise aux comptes locaux.)
+polkit.addRule(function(action, subject) {
+	if ((action.id == "org.freedesktop.UPower.PowerProfiles.switch-profile" ||
+	     action.id == "org.freedesktop.UPower.PowerProfiles.hold-profile" ||
+	     action.id == "net.hadess.PowerProfiles.switch-profile" ||
+	     action.id == "net.hadess.PowerProfiles.hold-profile") && subject.user != "nobody")
+		return polkit.Result.YES;
+});

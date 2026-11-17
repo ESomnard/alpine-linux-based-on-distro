@@ -3,6 +3,7 @@
 #   plume-maj                 liste les mises à jour, demande, puis met tout à jour
 #   plume-maj -y              sans question
 #   plume-maj --liste         liste seulement
+#   plume-maj --bios          firmwares du PC (BIOS/UEFI, SSD, Thunderbolt…) via fwupd
 #   plume-maj --verifier      (root) relit les dépôts et compte les mises à jour
 #                             dans /var/lib/plume/maj-dispo — lancé tout seul par
 #                             la barre, toutes les 6 h, sans mot de passe (sudoers)
@@ -49,6 +50,28 @@ if [ "${1:-}" = --nouvelle-version ]; then
 	echo "Void Linux est « en continu » : il n'y a pas de nouvelle version à installer,"
 	echo "tout arrive avec les mises à jour normales (plume-maj)."
 	fin 0
+fi
+
+if [ "${1:-}" = --bios ]; then
+	titre "Firmwares du PC (BIOS/UEFI, SSD, dock, Thunderbolt…)"
+	command -v fwupdmgr >/dev/null || { echo "fwupd absent : sudo xbps-install -S fwupd fwupd-efi"; fin 1; }
+	echo "Lecture du catalogue des fabricants (LVFS)…"
+	$SUDO fwupdmgr refresh --force >/dev/null 2>&1 || true
+	$SUDO fwupdmgr get-updates 2>/dev/null
+	case $? in
+	0) ;;
+	2) printf '%s✔ Aucun firmware à mettre à jour (ou matériel non pris en charge par son fabricant).%s\n' "$V" "$N"; fin 0 ;;
+	*) printf '%sImpossible de lire les firmwares (connexion internet ?).%s\n' "$J" "$N"; fin 1 ;;
+	esac
+	printf '\n%sBranche le chargeur et ne coupe pas le courant pendant la mise à jour.%s\n' "$J" "$N"
+	printf 'Installer maintenant ? [o/N] '
+	read -r rep || rep=n
+	case "$rep" in [oOyY]*) ;; *) echo "Rien n'a été changé."; fin 0 ;; esac
+	if $SUDO fwupdmgr update --assume-yes --no-reboot-check; then
+		printf '%s✔ Firmwares prêts : redémarre le PC pour terminer (l'"'"'écran du fabricant peut s'"'"'afficher).%s\n' "$V" "$N"
+		fin 0
+	fi
+	fin 1
 fi
 
 titre "Mises à jour de Plume"
@@ -117,4 +140,5 @@ if [ -n "$DERNIER" ] && [ "$DERNIER" != "$(uname -r)" ]; then
 	printf '%s⟳ Nouveau noyau installé : redémarre pour l'"'"'utiliser.%s\n' "$J" "$N"
 	command -v notify-send >/dev/null && notify-send -a Plume "Mises à jour" "Nouveau noyau : redémarre pour l'utiliser." 2>/dev/null
 fi
+command -v fwupdmgr >/dev/null && printf 'Firmwares du PC (BIOS, SSD…) : plume-maj --bios\n'
 [ "$OK" = 1 ] && fin 0 || fin 1

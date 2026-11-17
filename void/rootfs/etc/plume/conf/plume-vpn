@@ -1,0 +1,107 @@
+#!/bin/sh
+# Plume (Void) — VPN : WireGuard, OpenVPN, et VPN d'entreprise (Cisco AnyConnect,
+# GlobalProtect, Fortinet, Juniper/Pulse) via openconnect.
+#   plume-vpn                       menu (connexion, déconnexion, ajout)
+#   plume-vpn ajouter FICHIER       importe un fichier .conf (WireGuard) ou .ovpn (OpenVPN)
+#   plume-vpn entreprise NOM ADRESSE [anyconnect|gp|fortinet|pulse]
+#                                   enregistre un VPN d'entreprise (identifiants demandés à la connexion)
+#   plume-vpn connecter NOM | deconnecter | etat | liste | supprimer NOM
+#
+# Les profils sont dans /etc/plume/vpn (lisibles par root seulement : ils contiennent des clés).
+set -eu
+DIR=/etc/plume/vpn
+RUN=/run/plume-vpn
+
+root() { [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"; }
+note() { command -v notify-send >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] && notify-send -a Plume "VPN" "$1" || true; echo "$1"; }
+
+liste() { ls "$DIR" 2>/dev/null | sed -n 's/\.\(wg\|ovpn\|oc\)$//p' | sort -u; }
+actif() { cat "$RUN/actif" 2>/dev/null || true; }
+
+etat() {
+	a=$(actif)
+	if [ -n "$a" ]; then echo "Connecté : $a"; else echo "Pas de VPN connecté."; fi
+}
+
+ajouter() {
+	f=$1; [ -r "$f" ] || { echo "Fichier introuvable : $f" >&2; exit 1; }
+	nom=$(basename "$f" | sed 's/\.[^.]*$//' | tr -c 'a-zA-Z0-9_\n-' '-' | cut -c1-15)
+	mkdir -p "$DIR" && chmod 700 "$DIR"
+	case "$f" in
+	*.conf) install -m600 "$f" "$DIR/$nom.wg" ;;
+	*.ovpn) install -m600 "$f" "$DIR/$nom.ovpn" ;;
+	*) echo "Format inconnu : .conf (WireGuard) ou .ovpn (OpenVPN)" >&2; exit 1 ;;
+	esac
+	echo "VPN « $nom » ajouté. Connexion : plume-vpn connecter $nom"
+}
+
+entreprise() {
+	nom=$1 adresse=$2 proto=${3:-anyconnect}
+	case "$proto" in anyconnect|gp|fortinet|pulse|nc) ;; *) echo "Protocole inconnu : $proto" >&2; exit 1 ;; esac
+	mkdir -p "$DIR" && chmod 700 "$DIR"
+	printf 'ADRESSE=%s\nPROTOCOLE=%s\n' "$adresse" "$proto" > "$DIR/$nom.oc"
+	chmod 600 "$DIR/$nom.oc"
+	echo "VPN d'entreprise « $nom » ajouté ($proto). Connexion : plume-vpn connecter $nom"
+}
+
+deconnecter() {
+	a=$(actif); [ -n "$a" ] || { echo "Pas de VPN connecté."; return 0; }
+	if [ -f "$DIR/$a.wg" ]; then wg-quick down "$RUN/$a.conf" 2>/dev/null || true; rm -f "$RUN/$a.conf"
+	elif [ -f "$RUN/pid" ]; then kill "$(cat "$RUN/pid")" 2>/dev/null || true; rm -f "$RUN/pid"
+	fi
+	rm -f "$RUN/actif"
+	note "VPN « $a » déconnecté."
+}
+
+connecter() {
+	nom=$1
+	[ -n "$(actif)" ] && deconnecter
+	mkdir -p "$RUN" && chmod 755 "$RUN"
+	if [ -f "$DIR/$nom.wg" ]; then
+		# wg-quick nomme l'interface d'après le fichier
+		install -m600 "$DIR/$nom.wg" "$RUN/$nom.conf"
+		wg-quick up "$RUN/$nom.conf"
+	elif [ -f "$DIR/$nom.ovpn" ]; then
+		openvpn --config "$DIR/$nom.ovpn" --daemon "plume-vpn-$nom" --writepid "$RUN/pid" \
+			--script-security 2 --up /etc/plume/vpn-dns --down /etc/plume/vpn-dns --auth-nocache
+	elif [ -f "$DIR/$nom.oc" ]; then
+		. "$DIR/$nom.oc"
+		echo "Connexion à $ADRESSE ($PROTOCOLE) : identifiants de ton entreprise."
+		openconnect --protocol="$PROTOCOLE" --background --pid-file="$RUN/pid" \
+			--script=/usr/libexec/vpnc-scripts/vpnc-script "$ADRESSE"
+	else
+		echo "VPN inconnu : $nom (plume-vpn liste)" >&2; exit 1
+	fi
+	echo "$nom" > "$RUN/actif"
+	note "VPN « $nom » connecté."
+}
+
+menu() {
+	command -v fuzzel >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { etat; echo; liste; exit 0; }
+	a=$(actif)
+	choix=$({
+		[ -n "$a" ] && echo "⏻  Déconnecter « $a »"
+		liste | while read -r v; do [ "$v" = "$a" ] || echo "🔒  $v"; done
+		echo "＋  Ajouter un VPN…"
+	} | fuzzel --dmenu --prompt "VPN › " --lines 8 --width 40) || exit 0
+	case "$choix" in
+	"⏻"*) exec plume-terminal sh -c "sudo plume-vpn deconnecter; sleep 2" ;;
+	"🔒"*) exec plume-terminal sh -c "sudo plume-vpn connecter '${choix#🔒  }'; sleep 3" ;;
+	"＋"*) exec plume-terminal sh -c 'echo "Ajouter un VPN :"
+echo "  fichier WireGuard (.conf) ou OpenVPN (.ovpn) : sudo plume-vpn ajouter ~/Téléchargements/fichier"
+echo "  VPN d entreprise : sudo plume-vpn entreprise NOM vpn.entreprise.fr [anyconnect|gp|fortinet|pulse]"
+exec bash' ;;
+	esac
+}
+
+case "${1:-}" in
+"") menu ;;
+liste) liste ;;
+etat) etat ;;
+ajouter) root "$@"; ajouter "${2:?fichier}" ;;
+entreprise) root "$@"; entreprise "${2:?nom}" "${3:?adresse}" "${4:-}" ;;
+connecter) root "$@"; connecter "${2:?nom}" ;;
+deconnecter) root "$@"; deconnecter ;;
+supprimer) root "$@"; [ "$(actif)" = "${2:?nom}" ] && deconnecter; rm -f "$DIR/$2".*; echo "VPN « $2 » supprimé." ;;
+*) echo "Usage : plume-vpn [ajouter FICHIER | entreprise NOM ADRESSE [PROTO] | connecter NOM | deconnecter | etat | liste | supprimer NOM]" >&2; exit 2 ;;
+esac

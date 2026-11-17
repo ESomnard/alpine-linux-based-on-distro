@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Écrans
+GenericName=Réglage des écrans
+Comment=Résolution, zoom, 2e écran, vidéoprojecteur
+Exec=plume-ecrans
+Icon=video-display
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=écran;moniteur;résolution;zoom;échelle;vidéoprojecteur;affichage;display;monitor;

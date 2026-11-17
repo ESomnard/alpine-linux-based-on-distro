@@ -1,0 +1,63 @@
+#!/bin/sh
+# Plume (Void) — batterie et mode d'énergie.
+#   plume-batterie                 menu : économie / équilibré / performance (+ état de la batterie)
+#   plume-batterie economie|equilibre|performance
+#   plume-batterie --etat          batterie (%, temps restant) et mode actuel
+# Mode « économie » : processeur bridé, écran et wifi plus sobres → plus d'autonomie.
+# Mode « performance » : jeux, compilation (sur secteur de préférence).
+set -eu
+
+mode_ppd() { case "$1" in economie) echo power-saver ;; equilibre) echo balanced ;; performance) echo performance ;; esac; }
+nom_mode() { case "$1" in power-saver) echo "Économie" ;; balanced) echo "Équilibré" ;; performance) echo "Performance" ;; *) echo "$1" ;; esac; }
+
+etat() {
+	b=$(upower -e 2>/dev/null | grep -m1 BAT || true)
+	if [ -n "$b" ]; then
+		upower -i "$b" | awk -F: '
+			/percentage/ {gsub(/ /,"",$2); p=$2}
+			/state/ {gsub(/^ +/,"",$2); s=$2}
+			/time to (empty|full)/ {gsub(/^ +/,"",$2); t=$2}
+			END {
+				e = (s=="charging") ? "en charge" : (s=="discharging") ? "sur batterie" : (s=="fully-charged") ? "chargée" : s
+				printf "Batterie : %s, %s%s\n", p, e, (t!="" ? " (" t ")" : "")
+			}'
+	else
+		echo "Pas de batterie (PC fixe)."
+	fi
+	if command -v powerprofilesctl >/dev/null; then
+		echo "Mode : $(nom_mode "$(powerprofilesctl get 2>/dev/null || echo ?)")"
+	fi
+}
+
+changer() {
+	p=$(mode_ppd "$1")
+	[ -n "$p" ] || { echo "Mode inconnu : $1 (economie, equilibre, performance)" >&2; exit 2; }
+	powerprofilesctl set "$p"
+	msg="Mode $(nom_mode "$p")"
+	command -v notify-send >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] && notify-send -a Plume "Énergie" "$msg" || true
+	echo "$msg"
+}
+
+menu() {
+	command -v fuzzel >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { etat; exit 0; }
+	actuel=$(powerprofilesctl get 2>/dev/null || true)
+	coche() { [ "$1" = "$actuel" ] && echo "● " || echo "○ "; }
+	choix=$({
+		etat | sed 's/^/ℹ  /'
+		echo "$(coche power-saver)Économie (plus d'autonomie)"
+		echo "$(coche balanced)Équilibré"
+		powerprofilesctl list 2>/dev/null | grep -q performance && echo "$(coche performance)Performance (jeux, compilation)"
+	} | fuzzel --dmenu --prompt "Énergie › " --lines 6 --width 44) || exit 0
+	case "$choix" in
+	*Économie*) changer economie ;;
+	*Équilibré*) changer equilibre ;;
+	*Performance*) changer performance ;;
+	esac
+}
+
+case "${1:-}" in
+"") menu ;;
+--etat) etat ;;
+economie|equilibre|performance) changer "$1" ;;
+*) echo "Usage : plume-batterie [economie | equilibre | performance | --etat]" >&2; exit 2 ;;
+esac

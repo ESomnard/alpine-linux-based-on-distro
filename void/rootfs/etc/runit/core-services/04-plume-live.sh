@@ -4,7 +4,7 @@
 if [ -r /etc/default/live.conf ]; then
 	. /etc/default/live.conf
 	echo plume-live > /etc/hostname
-	for g in _seatd input network bluetooth; do
+	for g in _seatd input network bluetooth storage lpadmin scanner; do
 		usermod -aG "$g" "${USERNAME:-plume}" 2>/dev/null || true
 	done
 fi

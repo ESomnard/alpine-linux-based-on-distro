@@ -1,0 +1,56 @@
+#!/bin/sh
+# Plume (Void) — réglage des écrans : résolution, fréquence, zoom (écran 4K), position,
+# rotation, 2e écran ou vidéoprojecteur.
+#   plume-ecrans              ouvre la fenêtre de réglage (wdisplays) puis enregistre
+#   plume-ecrans --liste      écrans branchés et leurs réglages
+#   plume-ecrans --enregistrer  enregistre les réglages actuels (gardés au redémarrage)
+#   plume-ecrans --oublier    revient aux réglages automatiques
+#
+# Les réglages sont enregistrés par MODÈLE d'écran (marque, modèle, n° de série) dans
+# ~/.config/sway/ecrans.conf : ton écran retrouve ses réglages quel que soit le port.
+# Un écran éteint n'est jamais enregistré comme éteint : en débranchant l'autre écran,
+# tu ne te retrouves jamais devant un écran noir.
+set -eu
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/sway/ecrans.conf"
+
+command -v swaymsg >/dev/null && swaymsg -t get_version >/dev/null 2>&1 \
+	|| { echo "plume-ecrans : à lancer depuis le bureau (sway)." >&2; exit 1; }
+
+liste() {
+	swaymsg -t get_outputs -r | jq -r '.[] |
+		"\(.name)  \(.make) \(.model)\n    " +
+		(if .active then "\(.current_mode.width)x\(.current_mode.height) à \((.current_mode.refresh/1000)|floor) Hz, zoom \(.scale), position \(.rect.x),\(.rect.y), rotation \(.transform)"
+		 else "éteint" end)'
+}
+
+enregistrer() {
+	mkdir -p "$(dirname "$CONF")"
+	{
+		echo "# Plume — réglages des écrans, écrits par plume-ecrans le $(date '+%d/%m/%Y %H:%M')."
+		echo "# Ne pas modifier à la main : lance « plume-ecrans » (ou Écrans dans la grille des applications)."
+		swaymsg -t get_outputs -r | jq -r '.[] | select(.active) |
+			("\(.make) \(.model) \(.serial)" | gsub("\""; "")) as $id |
+			"output \"\($id)\" mode \(.current_mode.width)x\(.current_mode.height)@\(.current_mode.refresh/1000)Hz position \(.rect.x) \(.rect.y) scale \(.scale) transform \(.transform)"'
+	} > "$CONF.tmp"
+	mv "$CONF.tmp" "$CONF"
+	echo "Réglages des écrans enregistrés ($CONF)."
+}
+
+case "${1:-}" in
+--liste) liste ;;
+--enregistrer) enregistrer ;;
+--oublier)
+	printf '# Plume — réglages des écrans : automatiques.\n' > "$CONF"
+	swaymsg reload >/dev/null
+	echo "Réglages automatiques rétablis." ;;
+"")
+	command -v wdisplays >/dev/null || { echo "wdisplays absent : sudo xbps-install -S wdisplays" >&2; exit 1; }
+	avant=$(swaymsg -t get_outputs -r | jq -c '[.[] | {name, active, current_mode, rect, scale, transform}]')
+	wdisplays
+	apres=$(swaymsg -t get_outputs -r | jq -c '[.[] | {name, active, current_mode, rect, scale, transform}]')
+	if [ "$avant" != "$apres" ]; then
+		enregistrer
+		command -v notify-send >/dev/null && notify-send -a Plume "Écrans" "Réglages enregistrés : ils seront gardés au prochain démarrage." || true
+	fi ;;
+*) echo "Usage : plume-ecrans [--liste | --enregistrer | --oublier]" >&2; exit 2 ;;
+esac

@@ -49,7 +49,7 @@ cd "$M"
 	-p "$PKGS" \
 	-I "$I" \
 	-x "$W/void/postsetup.sh" \
-	-S "dbus seatd greetd iwd dhcpcd bluetoothd nftables zramen chronyd" \
+	-S "dbus seatd greetd iwd dhcpcd bluetoothd nftables zramen chronyd polkitd cupsd avahi-daemon power-profiles-daemon" \
 	-k fr -l fr_FR.UTF-8 \
 	-T "Plume Linux (Void)" \
 	-C "live.user=plume $LSM ${PLUME_CMDLINE:-}" \
