@@ -33,6 +33,8 @@ power-profiles-daemon upower fwupd fwupd-efi
 wireguard-tools openvpn openconnect vpnc-scripts
 # lumière du soir, installateur graphique
 wlsunset yad
+# sauvegarde ; accessibilité (lecteur d'écran Orca en français, clavier à l'écran)
+rsync orca speech-dispatcher espeak-ng at-spi2-core wvkbd
 # --- Applications du quotidien ---
 firefox firefox-i18n-fr mpv imv zathura zathura-pdf-mupdf pcmanfm micro
 # --- Plume (dépôt .xbps Plume) ---

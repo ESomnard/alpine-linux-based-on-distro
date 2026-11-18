@@ -117,6 +117,10 @@ fi
 OK=1
 if [ "$NB" -gt 0 ]; then
 	titre "Mise à jour des paquets Void"
+	# instantané du système avant de toucher à quoi que ce soit (retour possible : plume-retour)
+	if [ "$(findmnt -no FSTYPE / 2>/dev/null)" = btrfs ] && command -v plume-retour >/dev/null; then
+		$SUDO plume-retour --auto "avant la mise à jour de $NB paquet(s)" || true
+	fi
 	# xbps se met d'abord à jour lui-même s'il le faut (sinon il refuse le reste)
 	if printf '%s\n' "$LISTE" | grep -q '^xbps-[0-9]'; then
 		$SUDO xbps-install -uy xbps || OK=0
@@ -131,6 +135,7 @@ $SUDO -n /usr/bin/plume-maj --verifier 2>/dev/null || $SUDO /usr/bin/plume-maj -
 
 if [ "$OK" = 1 ]; then
 	printf '\n%s✔ Mises à jour terminées.%s\n' "$V" "$N"
+	[ "$(findmnt -no FSTYPE / 2>/dev/null)" = btrfs ] && printf 'En cas de souci : sudo plume-retour (revenir à l'"'"'état d'"'"'avant).\n'
 else
 	printf '\n%s✖ Une partie des mises à jour a échoué (voir ci-dessus).%s\n' "$R" "$N"
 fi

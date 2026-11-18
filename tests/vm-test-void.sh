@@ -20,7 +20,7 @@ docker run --rm --platform linux/amd64 --name plume-void-test -e PLUME_TEST_CHIF
 		set -e
 		apk add -q --no-cache qemu-system-x86_64 qemu-img python3 py3-pexpect xorriso dosfstools mtools >/dev/null
 		# fausse clé USB (FAT) pour le test de montage sans mot de passe
-		truncate -s 64M /tmp/usb.img && mkfs.vfat -n PLUMEUSB /tmp/usb.img >/dev/null
+		truncate -s 512M /tmp/usb.img && mkfs.vfat -n PLUMEUSB /tmp/usb.img >/dev/null
 		echo cle-usb-lue > /tmp/bonjour.txt && mcopy -i /tmp/usb.img /tmp/bonjour.txt ::/bonjour.txt
 		cd /tmp
 		xorriso -osirrox on -indev /o/$(basename "$ISO") -extract /boot /tmp/isoboot >/dev/null 2>&1

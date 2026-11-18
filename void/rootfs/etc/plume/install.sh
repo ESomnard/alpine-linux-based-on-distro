@@ -126,10 +126,19 @@ if [ "$CHIFFREMENT" = oui ]; then
 	ROOTDEV=/dev/mapper/plume-cible
 	mkfs.ext4 -q -L boot "$BOOTDEV"
 fi
-mkfs.ext4 -q -L plume "$ROOTDEV"
-
+# btrfs : instantanés du système avant chaque mise à jour (plume-retour), compression zstd.
+# Sous-volumes : @ (système), @home (tes fichiers, jamais touchés par un retour en arrière),
+# @snapshots (instantanés).
+mkfs.btrfs -q -f -L plume "$ROOTDEV"
 mkdir -p "$MNT"
 mount "$ROOTDEV" "$MNT"
+for sv in @ @home @snapshots; do btrfs -q subvolume create "$MNT/$sv"; done
+umount "$MNT"
+OPTS=noatime,compress=zstd:1
+mount -o "subvol=@,$OPTS" "$ROOTDEV" "$MNT"
+mkdir -p "$MNT/home" "$MNT/.snapshots"
+mount -o "subvol=@home,$OPTS" "$ROOTDEV" "$MNT/home"
+mount -o "subvol=@snapshots,$OPTS" "$ROOTDEV" "$MNT/.snapshots"
 mkdir -p "$MNT/boot"
 [ -n "$BOOTDEV" ] && mount "$BOOTDEV" "$MNT/boot"
 mkdir -p "$MNT/boot/efi"
@@ -139,10 +148,10 @@ log "Copie du système (quelques minutes)"
 tar -C / --one-file-system --xattrs -cf - \
 	--exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
 	--exclude=./mnt --exclude=./media --exclude=./home --exclude=./var/cache/xbps \
-	--exclude=./boot/efi --exclude=./var/lib/iwd . 2>/dev/null |
+	--exclude=./boot/efi --exclude=./var/lib/iwd --exclude=./.snapshots . 2>/dev/null |
 	tar -C "$MNT" --xattrs --xattrs-include='*' -xpf -
 ls "$MNT"/boot/vmlinuz-* >/dev/null 2>&1 || { echo "ERREUR : noyau absent de la copie" >&2; exit 1; }
-for d in proc sys dev run tmp mnt media home; do mkdir -p "$MNT/$d"; done
+for d in proc sys dev run tmp mnt media; do mkdir -p "$MNT/$d"; done
 chmod 1777 "$MNT/tmp"
 
 log "Réglages du système installé"
@@ -192,7 +201,9 @@ fi
 uuid() { blkid -s UUID -o value "$1"; }
 {
 	echo "# Plume — systèmes de fichiers"
-	echo "UUID=$(uuid "$ROOTDEV")  /          ext4  defaults,noatime  0 1"
+	echo "UUID=$(uuid "$ROOTDEV")  /             btrfs  subvol=@,$OPTS  0 0"
+	echo "UUID=$(uuid "$ROOTDEV")  /home         btrfs  subvol=@home,$OPTS  0 0"
+	echo "UUID=$(uuid "$ROOTDEV")  /.snapshots   btrfs  subvol=@snapshots,$OPTS  0 0"
 	[ -n "$BOOTDEV" ] && echo "UUID=$(uuid "$BOOTDEV")  /boot      ext4  defaults,noatime  0 2"
 	echo "UUID=$(uuid "$ESP")  /boot/efi  vfat  defaults,umask=0077  0 2"
 	echo "tmpfs  /tmp  tmpfs  defaults,nosuid,nodev  0 0"

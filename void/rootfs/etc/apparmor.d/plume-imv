@@ -16,7 +16,7 @@ profile plume-imv /usr/bin/imv{,-wayland,-x11,-dir} flags=(attach_disconnected) 
   dbus,
   signal (send, receive) peer=plume-imv,
   signal (receive),
-  deny @{HOME}/.mozilla/** mrwklx,
+  deny @{HOME}/{.mozilla,.config/mozilla}/** mrwklx,
   # un lien ouvert depuis l'appli : Firefox garde son propre profil
   /usr/lib/firefox/firefox Px -> plume-firefox,
 

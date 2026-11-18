@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Sauvegarde
+Comment=Sauvegarder tes fichiers sur un disque externe
+Exec=plume-sauvegarde
+Icon=document-save
+Terminal=false
+Categories=Settings;
+Keywords=sauvegarde;backup;copie;disque externe;restaurer;

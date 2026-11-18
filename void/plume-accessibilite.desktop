@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Accessibilité
+Comment=Loupe, lecteur d'écran, clavier à l'écran
+Exec=plume-accessibilite
+Icon=preferences-desktop-accessibility
+Terminal=false
+Categories=Settings;
+Keywords=accessibilité;loupe;zoom;lecteur d'écran;orca;clavier visuel;malvoyant;

@@ -58,6 +58,10 @@ mkdir -p "$R/etc/apparmor.d/disable"
 [ -f "$R/etc/apparmor.d/unix-chkpwd" ] && ln -sf /etc/apparmor.d/unix-chkpwd "$R/etc/apparmor.d/disable/unix-chkpwd"
 # profil « firefox » de Void : non confiné et sur le même programme que plume-firefox (le vrai)
 ln -sf /etc/apparmor.d/firefox "$R/etc/apparmor.d/disable/firefox"
+# lecteur d'écran : voix française par défaut (espeak-ng)
+[ -f "$R/etc/speech-dispatcher/speechd.conf" ] && sed -i \
+	-e 's/^#* *DefaultLanguage .*/DefaultLanguage "fr"/' \
+	-e 's/^#* *DefaultModule .*/DefaultModule espeak-ng/' "$R/etc/speech-dispatcher/speechd.conf"
 # lanceur : un seul « Foot » (voir /etc/xbps.d/20-plume-lanceur.conf)
 rm -f "$R/usr/share/applications/footclient.desktop" "$R/usr/share/applications/foot-server.desktop"
 # Alpine seulement : desktop.sh (le bureau est déjà dans l'ISO) ; slim-firmware.sh a sa version Void

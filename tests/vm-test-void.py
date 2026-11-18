@@ -151,6 +151,9 @@ ok &= vm.check("Firefox démarre confiné (plume-firefox)",
                "(firefox --headless --no-remote about:blank >/dev/null 2>&1 &) ; sleep 60 ; "
                "cat /proc/$(pgrep -o -f /usr/lib/firefox/firefox)/attr/apparmor/current ; pkill -f /usr/lib/firefox/firefox",
                r"plume-firefox \(enforce\)", 240)
+ok &= vm.check("AppArmor : mpv ne lit pas le profil Firefox (cookies, mots de passe)",
+               "P=$(ls -d ~/.config/mozilla/firefox ~/.mozilla/firefox 2>/dev/null | head -1); ls \"$P\" >/dev/null && "
+               "! aa-exec -p plume-mpv -- ls \"$P\" 2>/dev/null && echo cookies-proteges", r"cookies-proteges")
 # clé USB : montée par l'utilisateur sans mot de passe (udisks2 + règle polkit du groupe storage)
 ok &= vm.check("clé USB montée sans mot de passe (udisks2 + polkit)",
                "udisksctl mount --no-user-interaction -b /dev/disk/by-label/PLUMEUSB && "
@@ -176,6 +179,9 @@ dbus-run-session sh -c '
   gdbus call $P org.freedesktop.portal.FileChooser version && echo portail-fichiers-ok
   plume-ecrans --enregistrer && swaymsg reload && grep -q "^output" ~/.config/sway/ecrans.conf && echo ecrans-ok
   plume-ecrans --liste
+  plume-accessibilite loupe 2 >/dev/null; [ "$(swaymsg -t get_outputs -r | jq ".[0].scale == 2")" = true ] && echo loupe-ok
+  plume-accessibilite loupe 1 >/dev/null
+  plume-ecrans --hdr on | grep -q Vulkan && [ -f ~/.config/plume/rendu-vulkan ] && plume-ecrans --hdr off >/dev/null && [ ! -f ~/.config/plume/rendu-vulkan ] && echo hdr-ok
   swaymsg exit
 '
 """
@@ -185,7 +191,9 @@ code, out = vm.run(f"echo {b64} | base64 -d > /tmp/session.sh; sh /tmp/session.s
 step("OK : portail partage d'écran (wlr)" if "portail-ecran-ok" in out else "ECHEC : portail partage d'écran (wlr)")
 step("OK : portail fichiers (gtk)" if "portail-fichiers-ok" in out else "ECHEC : portail fichiers (gtk)")
 step("OK : plume-ecrans enregistre et sway relit les réglages" if "ecrans-ok" in out else "ECHEC : plume-ecrans")
-ok &= all(m in out for m in ("portail-ecran-ok", "portail-fichiers-ok", "ecrans-ok"))
+step("OK : loupe (zoom ×2 puis ×1)" if "loupe-ok" in out else "ECHEC : loupe")
+step("OK : HDR (passage au rendu Vulkan, puis retour)" if "hdr-ok" in out else "ECHEC : HDR")
+ok &= all(m in out for m in ("portail-ecran-ok", "portail-fichiers-ok", "ecrans-ok", "loupe-ok", "hdr-ok"))
 if "portail-ecran-ok" not in out:
     vm.run("tail -5 /tmp/pipewire.log; ls /usr/share/xdg-desktop-portal/portals/ /etc/xdg/xdg-desktop-portal/")
 # imprimantes, scanners, énergie, firmwares, VPN, wifi public
@@ -195,7 +203,8 @@ ok &= vm.check("scanners : SANE + réseau (airscan)", "scanimage --version && gr
 ok &= vm.check("énergie : mode économie sans mot de passe (polkit)",
                "plume-batterie economie && powerprofilesctl get && plume-batterie equilibre", r"power-saver")
 # fwupd : en VM émulée, son démarrage dépasse le délai de dbus (25 s) ; on le lance d'abord
-vm.run(f"echo {PW} | sudo -S sh -c '/usr/libexec/fwupd/fwupd >/dev/null 2>&1 &'; sleep 120", 200)
+vm.run(f"echo {PW} | sudo -S sh -c 'setsid -f /usr/libexec/fwupd/fwupd </dev/null >/dev/null 2>&1'; "
+       "for i in $(seq 30); do sudo fwupdmgr get-devices --json >/dev/null 2>&1 && break; sleep 10; done", 400)
 ok &= vm.check("firmwares du PC : fwupd répond", f"echo {PW} | sudo -S fwupdmgr get-devices --json 2>/dev/null | head -c 300", r"Devices", 200)
 ok &= vm.check("pilotes : pas de carte NVIDIA détectée (VM)", "plume-pilotes", r"Pas de carte NVIDIA")
 vm.run("umask 077; printf '[Interface]\\nPrivateKey = %s\\nAddress = 10.99.0.2/24\\n[Peer]\\nPublicKey = %s\\n"
@@ -223,5 +232,39 @@ ok &= vm.check("slim-firmware : firmwares allégés, mises à jour xbps toujours
                f"{{ [ $b -lt $a ] || [ $b -le 2 ]; }} && [ -f /etc/xbps.d/90-plume-firmware.conf ] && echo {PW} | sudo -S xbps-install -Sun >/dev/null && echo slim-ok",
                r"slim-ok", 900)
 vm.run("tail -4 /tmp/slim.log")
+ok &= vm.check("accessibilité : Orca, voix française, clavier à l'écran",
+               "command -v orca wvkbd-mobintl && grep -q '^DefaultLanguage \"fr\"' /etc/speech-dispatcher/speechd.conf && echo a11y-ok", r"a11y-ok")
+# sauvegarde sur la clé USB (FAT)
+ok &= vm.check("sauvegarde des fichiers sur un disque externe (plume-sauvegarde)",
+               "{ udisksctl mount --no-user-interaction -b /dev/disk/by-label/PLUMEUSB >/dev/null 2>&1 || mountpoint -q /run/media/$(id -un)/PLUMEUSB; } && "
+               "plume-sauvegarde --disque /run/media/$(id -un)/PLUMEUSB && plume-sauvegarde maintenant && "
+               "ls /run/media/$(id -un)/PLUMEUSB/Plume-sauvegardes/$(id -un)/*/doc.txt && "
+               "udisksctl unmount --no-user-interaction -b /dev/disk/by-label/PLUMEUSB", r"doc\.txt", 300)
+# retour en arrière : instantané, on casse le système (logiciel retiré, fichier ajouté), on restaure
+ok &= vm.check("système sur btrfs (sous-volume @)", "findmnt -no FSTYPE,FSROOT /", r"btrfs\s+/@")
+code, out = vm.run(f"echo {PW} | sudo -S plume-retour creer 'test du retour'", 120)
+m = re.search(r"Instantané (\d+) créé", out)
+ok &= m is not None
+step("OK : instantané créé" if m else "ECHEC : instantané")
+if m:
+    vm.run(f"echo {PW} | sudo -S xbps-remove -y micro >/dev/null; sudo touch /etc/plume-marqueur; echo apres > ~/apres.txt; command -v micro || echo micro-retire", 300)
+    ok &= vm.check("retour en arrière (restauration)", f"echo {PW} | sudo -S plume-retour restaurer {m.group(1)} --oui", r"Système remis", 300)
+    vm.p.send(f"echo {PW} | sudo -S reboot\r")
+    try:
+        vm.p.expect(pexpect.EOF, timeout=300)
+    except pexpect.TIMEOUT:
+        vm.p.terminate(force=True)
+    # ============================ après le retour en arrière ============================
+    step("Phase 3 : redémarrage après le retour en arrière")
+    vm = VM(f"-no-reboot -drive file={DISK},if=virtio -nic user,model=virtio-net-pci")
+    if CHIFFRE:
+        vm.expect(r"[Pp]assword|[Pp]assphrase", 900, "demande de la phrase secrète")
+        vm.p.send(f"{PHRASE}\r")
+    vm.login("test", PW)
+    ok &= vm.check("après retour : logiciel retiré revenu, fichier système ajouté disparu",
+                   "command -v micro && [ ! -e /etc/plume-marqueur ] && echo systeme-revenu", r"systeme-revenu")
+    ok &= vm.check("après retour : fichiers personnels intacts (/home)", "cat ~/doc.txt ~/apres.txt", r"doc\s+apres")
+    ok &= vm.check("après retour : ancien système nettoyé au prochain instantané",
+                   f"echo {PW} | sudo -S plume-retour creer suivant >/dev/null && [ \"$(sudo plume-retour | grep -c ancien)\" = 0 ] && echo ancien-nettoye", r"ancien-nettoye")
 step("SUCCES : tous les tests sont passés" if ok else "ECHEC : au moins un test a échoué")
 vm.p.send(f"echo {PW} | sudo -S poweroff\r")

@@ -1,0 +1,73 @@
+#!/bin/sh
+# Plume (Void) — accessibilité.
+#   plume-accessibilite              menu
+#   plume-accessibilite loupe        agrandit l'écran : ×1 → ×1,5 → ×2 → ×1   (Super + Alt + z)
+#   plume-accessibilite lecteur      lecteur d'écran Orca, voix française       (Super + Alt + s)
+#   plume-accessibilite clavier      clavier à l'écran (souris, écran tactile)  (Super + Alt + k)
+#   plume-accessibilite --demarrage  reprend les choix gardés (lancé par sway)
+# Les choix sont gardés dans ~/.config/plume/accessibilite.
+set -eu
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plume"
+ETAT="$DIR/accessibilite"
+mkdir -p "$DIR"
+touch "$ETAT"
+
+note() { command -v notify-send >/dev/null && notify-send -a Plume "Accessibilité" "$1" || true; }
+garde() { grep -qx "$1" "$ETAT"; }
+garder() { grep -vx "$1" "$ETAT" > "$ETAT.tmp" || true; [ "$2" = on ] && echo "$1" >> "$ETAT.tmp"; mv "$ETAT.tmp" "$ETAT"; }
+
+# loupe : zoom de l'écran actif (tout est agrandi, net : c'est le zoom de sway)
+loupe() {
+	# écran actif (sinon le premier allumé)
+	sortie=$(swaymsg -t get_outputs -r | jq -c '([.[] | select(.focused)] + [.[] | select(.active)])[0]')
+	ecran=$(echo "$sortie" | jq -r .name)
+	z=$(echo "$sortie" | jq -r .scale)
+	case "$z" in 1|1.0|1.000000) n=1.5 ;; 1.5|1.500000) n=2 ;; *) n=1 ;; esac
+	[ -n "${1:-}" ] && n=$1
+	swaymsg output "$ecran" scale "$n" >/dev/null
+	note "Loupe : ×$n (Super + Alt + z pour changer)"
+}
+
+lecteur() {
+	if pgrep -x orca >/dev/null; then
+		pkill -x orca; garder lecteur off; note "Lecteur d'écran arrêté."
+	else
+		command -v orca >/dev/null || { note "Orca absent : sudo xbps-install -S orca"; exit 1; }
+		# voix française (espeak-ng via speech-dispatcher)
+		export SPEECHD_LANGUAGE=fr LANGUAGE=fr
+		setsid orca --replace >/dev/null 2>&1 &
+		garder lecteur on; note "Lecteur d'écran activé (Super + Alt + s pour l'arrêter)."
+	fi
+}
+
+clavier() {
+	if pgrep -x wvkbd-mobintl >/dev/null; then
+		pkill -x wvkbd-mobintl; garder clavier off
+	else
+		setsid wvkbd-mobintl -L 280 --fn "JetBrains Mono 14" >/dev/null 2>&1 &
+		garder clavier on
+	fi
+}
+
+menu() {
+	choix=$(printf '%s\n' "🔍  Loupe (agrandir l'écran)" "🔊  Lecteur d'écran (Orca)" "⌨  Clavier à l'écran" "↺  Loupe : taille normale" |
+		fuzzel --dmenu --prompt "Accessibilité › " --lines 4 --width 40) || exit 0
+	case "$choix" in
+	"🔍"*) loupe ;;
+	"🔊"*) lecteur ;;
+	"⌨"*) clavier ;;
+	"↺"*) loupe 1 ;;
+	esac
+}
+
+case "${1:-}" in
+"") menu ;;
+loupe) loupe "${2:-}" ;;
+lecteur) lecteur ;;
+clavier) clavier ;;
+--demarrage)
+	garde lecteur && lecteur
+	garde clavier && clavier
+	exit 0 ;;
+*) echo "Usage : plume-accessibilite [loupe [1|1.5|2] | lecteur | clavier]" >&2; exit 2 ;;
+esac

@@ -184,6 +184,10 @@ Activables en une ligne dans `desktop.list` : Xwayland, Bluetooth, partage d'éc
 | Énergie (`plume-batterie`), firmwares (`plume-maj --bios`) | ✅ Testé en VM : mode économie sans mot de passe ; fwupd répond (en VM, son 1er démarrage est lent) |
 | VPN (`plume-vpn`) | ✅ Testé en VM : tunnel WireGuard ajouté, connecté, déconnecté (bug de nom trouvé et corrigé) ; OpenVPN et VPN d'entreprise non testés (il faut un serveur) |
 | Pilotes NVIDIA (`plume-pilotes`), wifi public (`plume-portail`) | ✅ Choix du pilote vérifié sur 10 cartes (RTX 40 → GT 430) ; détection du portail testée en VM (réseau normal) ; vrai portail non testé |
+| Retour en arrière (`plume-retour`, btrfs) | ✅ Testé en VM, disque normal **et** chiffré : instantané, logiciel retiré + fichier ajouté, restauration, redémarrage → système revenu, `/home` intact, ancien système nettoyé ensuite ; aussi testé sur un disque btrfs en conteneur (6 instantanés automatiques gardés) |
+| Sauvegarde (`plume-sauvegarde`) | ✅ Testé en conteneur (dossiers datés, fichiers inchangés partagés, cache exclu) et en VM sur une clé USB |
+| Accessibilité (loupe, Orca en français, clavier à l'écran), HDR | ✅ Loupe testée en VM ; Orca, voix française et clavier installés ; HDR : passage au rendu Vulkan testé, vrai écran HDR non testé |
+| Publication automatique du dépôt (GitHub Action) | 🟡 Écrite et vérifiée (actionlint) ; à lancer sur GitHub une fois le secret `PLUME_VOID_KEY` ajouté |
 | Lumière du soir (`plume-nuit`), installateur graphique | 🟡 Codés, pas encore vus à l'écran |
 | UEFI, wifi, son, Bluetooth, veille sur un vrai PC | ⚪ À tester |
 | `slim-firmware.sh` (alléger les firmwares) | ✅ Testé en VM : 667 Mo → 1 Mo ; seuls les fichiers utiles à ton matériel restent, et des règles `noextract` de xbps empêchent les mises à jour de remettre les autres (`--restaurer` remet tout). Bug trouvé et corrigé : noms de firmwares avec espaces |
@@ -240,6 +244,17 @@ make test test-void  # installation complète automatique de chacune dans une VM
 make release         # out/release/ : ISO renommées, SHA256SUMS, notes ; affiche la commande gh
 ./build/publier-depot.sh   # dépôts .apk et .xbps signés -> branche gh-pages
 ```
+
+**Publication automatique du dépôt Void** (`.github/workflows/depot-void.yml`) : à chaque push sur
+`main` qui touche un composant Plume, GitHub reconstruit, signe et publie le dépôt `.xbps` dans
+`gh-pages/plume-void` (le dépôt Alpine n'est pas touché). Mise en place, une seule fois :
+1. GitHub → *Settings* → *Secrets and variables* → *Actions* → *New repository secret* :
+   nom `PLUME_VOID_KEY`, valeur = contenu de `cles/plume-void.pem` ;
+2. *Settings* → *Pages* : *Deploy from a branch*, branche `gh-pages`.
+
+> ⚠️ La clé privée est alors aussi chez GitHub (chiffrée, lisible seulement par l'Action) : pratique,
+> mais si ton compte GitHub est piraté, la clé l'est aussi. Sans le secret, l'Action s'arrête et
+> `./build/publier-depot.sh` reste la méthode à la main.
 
 ---
 
@@ -758,6 +773,10 @@ Tout est dans la grille des applications (`Super + a`) ou en une commande :
 | **Wifi d'hôtel, de gare** | Rien à faire | La page de connexion du réseau s'ouvre toute seule dans Firefox (`plume-portail`) |
 | **Lumière du soir** | `Super + n`, **Lumière du soir** ou `plume-nuit` | Écran plus chaud de 20 h à 7 h 30 (`~/.config/plume/nuit.conf`) |
 | **Carte NVIDIA** | `sudo plume-pilotes --installer` (fait par `plume-jeux`) | RTX 20 et plus : pilote `nvidia` ; GTX 900 à 16 : `nvidia580` ; plus anciennes : pilote libre gardé (les pilotes officiels anciens ne font pas tourner sway) |
+| **Retour en arrière** après une mauvaise mise à jour | **Retour en arrière** ou `sudo plume-retour` | Système sur btrfs : un instantané est pris tout seul avant chaque `plume-maj` (6 gardés). `sudo plume-retour restaurer N` puis redémarrage : le système revient à cet état, **tes fichiers (/home) ne bougent pas**. Si Plume ne démarre plus : depuis la clé USB live, `sudo plume-retour --disque /dev/sdX3 restaurer N` (disque chiffré : `cryptsetup open` d'abord) |
+| **Sauvegarde** de tes fichiers | **Sauvegarde** ou `plume-sauvegarde` | Choisis un disque externe une fois : ton dossier personnel y est copié, puis **tout seul une fois par jour** quand le disque est branché. Chaque sauvegarde est un dossier daté, lisible sans logiciel ; les fichiers inchangés ne prennent pas de place en plus ; 20 gardées |
+| **Accessibilité** | **Accessibilité**, ou `Super + Alt + z` (loupe ×1,5 / ×2), `Super + Alt + s` (lecteur d'écran Orca, voix française), `Super + Alt + k` (clavier à l'écran) | Les choix sont gardés d'une session à l'autre |
+| **HDR** | `plume-ecrans --hdr on` | Sur les écrans qui le permettent ; la 1re fois, déconnexion / reconnexion (moteur de rendu Vulkan). Jeux : `gamescope --hdr-enabled -- %command%` dans Steam |
 | **Installer Plume** (session live) | **Installer Plume** | Installateur graphique : disque, compte, clavier, chiffrement à la souris, puis l'installation se déroule dans le terminal |
 
 ### Toutes les applications (plume-lanceur)
@@ -905,10 +924,10 @@ Comparaison avec Ubuntu : ce qui manque vraiment au quotidien.
 | ✅ fait| **Installateur graphique** | `install.sh` se lance dans un terminal : difficile pour un débutant | Installateur HUD à la souris |
 | ✅ fait| **Wifi d'hôtel ou de gare** | La page de connexion du wifi public ne s'ouvre pas toute seule | Détection du portail captif et ouverture de Firefox |
 | ✅ fait| **Lumière du soir** | Pas de filtre de lumière bleue | wlsunset + bouton dans la barre |
-| 🟢 | **Retour en arrière** après une mauvaise mise à jour | Void évolue en continu : une mise à jour ratée peut casser le système | Instantanés btrfs, ou ancien noyau au choix dans GRUB |
-| 🟢 | **Sauvegarde** des fichiers | Pas d'outil de sauvegarde simple | Équivalent de Déjà Dup |
+| ✅ fait| **Retour en arrière** après une mauvaise mise à jour | Void évolue en continu : une mise à jour ratée peut casser le système | Instantanés btrfs, ou ancien noyau au choix dans GRUB |
+| ✅ fait| **Sauvegarde** des fichiers | Pas d'outil de sauvegarde simple | Équivalent de Déjà Dup |
 | ✅ fait| **VPN** en un clic | Il faut tout configurer à la main | WireGuard / OpenVPN dans un panneau |
-| 🟢 | **Accessibilité** | Ni loupe ni lecteur d'écran | Loupe, lecteur d'écran, clavier à l'écran hors du terminal |
+| ✅ fait| **Accessibilité** | Ni loupe ni lecteur d'écran | Loupe, lecteur d'écran, clavier à l'écran hors du terminal |
 
 #### Pour le jeu vidéo et le développement pro
 
@@ -918,7 +937,7 @@ Comparaison avec Ubuntu : ce qui manque vraiment au quotidien.
 | ✅ fait| Dev pro | **VS Code** : seule la version Flatpak est dans la Logithèque ; son terminal intégré ne voit ni tes compilateurs ni Docker | Version native (`vscode` dans Void) dans la Logithèque |
 | ✅ fait| Jeux | **Carte NVIDIA** : pilote officiel à installer à la main (`plume-jeux` donne seulement la commande) | Détection et installation automatiques du bon pilote (`nvidia` ou `nvidia470` + 32 bits) |
 | ✅ fait| Dev pro | **VPN d'entreprise** (OpenVPN, Cisco AnyConnect, GlobalProtect, WireGuard) souvent obligatoire au travail | Paquets VPN + panneau (ligne VPN ci-dessus, à remonter en 🟠) |
-| 🟢 | Jeux | **HDR** : sway ne le gère pas encore bien | Attendre sway, ou gamescope en HDR |
+| ✅ fait| Jeux | **HDR** : sway ne le gère pas encore bien | Attendre sway, ou gamescope en HDR |
 | 🟢 | Dev pro | **Pas de systemd** : quelques outils et tutoriels supposent `systemctl` | Distrobox (Ubuntu dans un conteneur) ; Docker marche déjà avec runit |
 | — | Jeux | **Anti-triche noyau** (Valorant, Fortnite, Call of Duty…) | Rien à faire : ces jeux ne marchent sur aucune distro Linux |
 | — | Dev pro | **PC géré par l'entreprise** (antivirus imposé, gestion à distance) | Hors de portée : ces outils ne supportent qu'Ubuntu ou RHEL |
@@ -941,7 +960,7 @@ et environ 150 Mo de RAM pour le bureau.
 | ✅ | **Sécuriser la distro** : pare-feu nftables (`plume-parefeu`), noyau durci (`sysctl`), disque chiffré LUKS2 en option, AppArmor, Secure Boot avec tes clés (`plume-secureboot`). Plume Void : vrais profils AppArmor pour Firefox, mpv, imv et Zathura (`/etc/apparmor.d/plume-*`) |
 | ✅ | **Mises à jour simples** : `plume-maj` + ⬆ MAJ dans la barre (paquets Alpine + Flatpak), passage à la version suivante d'Alpine (`plume-maj --nouvelle-version`, ★ dans la barre). Reste : les outils Plume eux-mêmes (dépôt .apk ci-dessous) |
 | ✅ | Dépôt `.apk` Plume (`make depot`, signé, embarqué dans l'ISO), publication sur GitHub Pages préparée par `./build/publier-depot.sh` |
-| 🟢 | **Plus tard (optionnel) : publication automatique du dépôt** — une GitHub Action qui reconstruit et publie le dépôt à chaque push. Il faudrait confier la clé privée de signature aux *secrets* GitHub : pratique, mais la clé ne serait plus seulement chez toi. En attendant : `./build/publier-depot.sh` à la main |
+| ✅ fait | **Publication automatique du dépôt** (`.github/workflows/depot-void.yml`, Plume Void ; mise en place : section « Construire et publier ») — une GitHub Action qui reconstruit et publie le dépôt à chaque push. Il faudrait confier la clé privée de signature aux *secrets* GitHub : pratique, mais la clé ne serait plus seulement chez toi. En attendant : `./build/publier-depot.sh` à la main |
 
 ### Applications
 

@@ -5,6 +5,8 @@
 #   plume-ecrans --liste      écrans branchés et leurs réglages
 #   plume-ecrans --enregistrer  enregistre les réglages actuels (gardés au redémarrage)
 #   plume-ecrans --oublier    revient aux réglages automatiques
+#   plume-ecrans --hdr on|off HDR sur les écrans qui le permettent (moteur de rendu Vulkan :
+#                             la 1re fois, il faut se déconnecter puis se reconnecter)
 #
 # Les réglages sont enregistrés par MODÈLE d'écran (marque, modèle, n° de série) dans
 # ~/.config/sway/ecrans.conf : ton écran retrouve ses réglages quel que soit le port.
@@ -12,6 +14,9 @@
 # tu ne te retrouves jamais devant un écran noir.
 set -eu
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/sway/ecrans.conf"
+PDIR="${XDG_CONFIG_HOME:-$HOME/.config}/plume"
+HDR="$PDIR/hdr-ecrans"          # identifiants des écrans en HDR
+VULKAN="$PDIR/rendu-vulkan"     # lu par /etc/profile.d/plume-void.sh au démarrage de la session
 
 command -v swaymsg >/dev/null && swaymsg -t get_version >/dev/null 2>&1 \
 	|| { echo "plume-ecrans : à lancer depuis le bureau (sway)." >&2; exit 1; }
@@ -31,13 +36,42 @@ enregistrer() {
 		swaymsg -t get_outputs -r | jq -r '.[] | select(.active) |
 			("\(.make) \(.model) \(.serial)" | gsub("\""; "")) as $id |
 			"output \"\($id)\" mode \(.current_mode.width)x\(.current_mode.height)@\(.current_mode.refresh/1000)Hz position \(.rect.x) \(.rect.y) scale \(.scale) transform \(.transform)"'
+		if [ -s "$HDR" ]; then sed 's/.*/output "&" hdr on/' "$HDR"; fi
 	} > "$CONF.tmp"
 	mv "$CONF.tmp" "$CONF"
 	echo "Réglages des écrans enregistrés ($CONF)."
 }
 
+hdr() {
+	mkdir -p "$PDIR"
+	if [ "$1" = off ]; then
+		swaymsg output '*' hdr off >/dev/null 2>&1 || true
+		rm -f "$HDR" "$VULKAN"; enregistrer >/dev/null
+		echo "HDR désactivé (moteur de rendu normal à la prochaine connexion)."; return
+	fi
+	if [ "${WLR_RENDERER:-}" != vulkan ]; then
+		touch "$VULKAN"
+		echo "Le HDR demande le moteur de rendu Vulkan : déconnecte-toi puis reconnecte-toi,"
+		echo "puis relance « plume-ecrans --hdr on »."
+		return
+	fi
+	: > "$HDR.tmp"
+	swaymsg -t get_outputs -r | jq -r '.[] | select(.active) | "\(.name)\t\(.make) \(.model) \(.serial)"' |
+	while IFS="$(printf '\t')" read -r nom id; do
+		if swaymsg output "$nom" hdr on >/dev/null 2>&1; then
+			echo "$id" | tr -d '"' >> "$HDR.tmp"; echo "HDR activé : $nom ($id)"
+		else
+			echo "Pas de HDR possible sur $nom ($id)"
+		fi
+	done
+	mv "$HDR.tmp" "$HDR"
+	enregistrer >/dev/null
+	echo "Jeux en HDR : options de lancement Steam « gamescope --hdr-enabled -- %command% »."
+}
+
 case "${1:-}" in
 --liste) liste ;;
+--hdr) hdr "${2:-on}" ;;
 --enregistrer) enregistrer ;;
 --oublier)
 	printf '# Plume — réglages des écrans : automatiques.\n' > "$CONF"
@@ -52,5 +86,5 @@ case "${1:-}" in
 		enregistrer
 		command -v notify-send >/dev/null && notify-send -a Plume "Écrans" "Réglages enregistrés : ils seront gardés au prochain démarrage." || true
 	fi ;;
-*) echo "Usage : plume-ecrans [--liste | --enregistrer | --oublier]" >&2; exit 2 ;;
+*) echo "Usage : plume-ecrans [--liste | --enregistrer | --oublier | --hdr on|off]" >&2; exit 2 ;;
 esac

@@ -1,0 +1,92 @@
+# Plume Void — publication automatique du dépôt .xbps signé sur GitHub Pages (gh-pages/plume-void).
+# À chaque push sur main qui touche un composant Plume : compilation dans un conteneur Void,
+# signature avec la clé du secret PLUME_VOID_KEY, publication. Le dépôt Alpine (gh-pages/plume)
+# n'est pas touché.
+#
+# Mise en place (une seule fois) : GitHub > Settings > Secrets and variables > Actions >
+# New repository secret, nom PLUME_VOID_KEY, valeur = contenu de cles/plume-void.pem.
+# Puis Settings > Pages : source « Deploy from a branch », branche gh-pages.
+name: Dépôt Plume Void
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "void/**"
+      - "hud/**"
+      - "shell/**"
+      - "term/**"
+      - "lanceur/**"
+      - "fonds/**"
+      - "wifi/**"
+      - "son/**"
+      - "bluetooth/**"
+      - "logitheque/**"
+      - "rootfs/etc/plume/conf/**"
+      - "paquets/VERSION"
+      - ".github/workflows/depot-void.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: depot-void
+  cancel-in-progress: false
+
+jobs:
+  depot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # révision = nombre de commits (comme ./void/depot.sh), toujours croissante
+
+      - name: Clé de signature (secret PLUME_VOID_KEY)
+        env:
+          PLUME_VOID_KEY: ${{ secrets.PLUME_VOID_KEY }}
+        run: |
+          if [ -z "$PLUME_VOID_KEY" ]; then
+            echo "::error::Secret PLUME_VOID_KEY absent : voir l'en-tête de ce fichier."
+            exit 1
+          fi
+          mkdir -p cles
+          printf '%s\n' "$PLUME_VOID_KEY" > cles/plume-void.pem
+          chmod 600 cles/plume-void.pem
+
+      - name: Compilation et signature (conteneur Void)
+        run: |
+          docker run --rm -v "$PWD":/work \
+            -e REL="$(git rev-list --count HEAD)" -e VERSION="$(cat paquets/VERSION)" \
+            ghcr.io/void-linux/void-glibc-full:latest sh /work/void/depot-inside.sh
+          sudo chown -R "$(id -u):$(id -g)" out cles
+
+      - name: Effacer la clé
+        if: always()
+        run: shred -u cles/plume-void.pem 2>/dev/null || rm -f cles/plume-void.pem
+
+      - name: Publication (gh-pages/plume-void)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          REV=$(git rev-list --count HEAD)
+          if git fetch -q origin gh-pages; then
+            git worktree add -q gh FETCH_HEAD
+            git -C gh checkout -q -B gh-pages
+          else
+            git worktree add -q --detach gh
+            git -C gh checkout -q --orphan gh-pages
+            git -C gh rm -rfq .
+          fi
+          mkdir -p gh/plume-void
+          rsync -a --delete out/depot-void/ gh/plume-void/
+          touch gh/.nojekyll
+          git -C gh add -A plume-void .nojekyll
+          if git -C gh diff --cached --quiet; then
+            echo "Dépôt inchangé : rien à publier."
+            exit 0
+          fi
+          git -C gh commit -q -m "Dépôt Plume Void : révision $REV"
+          git -C gh push -q origin gh-pages
+          echo "Publié : https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/plume-void/x86_64"

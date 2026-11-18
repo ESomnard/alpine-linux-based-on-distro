@@ -1,0 +1,107 @@
+#!/bin/sh
+# Plume (Void) — sauvegarde de tes fichiers (dossier personnel) sur un disque externe.
+#   plume-sauvegarde                  menu : choisir le disque, sauvegarder, retrouver un fichier
+#   plume-sauvegarde maintenant       sauvegarde tout de suite (sur le disque choisi)
+#   plume-sauvegarde --disque DOSSIER choisit le disque (ex. /run/media/moi/MONDISQUE)
+#   plume-sauvegarde --auto           (lancé par sway) sauvegarde quand le disque est branché
+#                                     et que la dernière sauvegarde a plus d'un jour
+#   plume-sauvegarde --liste
+#
+# Chaque sauvegarde est un dossier daté (Plume-sauvegardes/2026-11-17_2030) : tes fichiers y sont
+# tels quels, on les retrouve avec le gestionnaire de fichiers, sans logiciel spécial. Les fichiers
+# qui n'ont pas changé ne sont pas recopiés (liens « durs ») : chaque sauvegarde ne prend que la
+# place des nouveautés. Les 20 dernières sont gardées.
+set -eu
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/plume/sauvegarde.conf"
+GARDER=20
+CIBLE=""
+[ -r "$CONF" ] && . "$CONF"
+
+note() { command -v notify-send >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] && notify-send -a Plume "Sauvegarde" "$1" || true; echo "$1"; }
+racine() { echo "$CIBLE/Plume-sauvegardes/$(id -un)"; }
+derniere() { ls -1d "$(racine)"/20* 2>/dev/null | sort | tail -1; }
+
+choisir() {
+	d=$1
+	[ -d "$d" ] && [ -w "$d" ] || { echo "Dossier introuvable ou non inscriptible : $d" >&2; exit 1; }
+	mkdir -p "$(dirname "$CONF")"
+	printf "CIBLE='%s'\n" "$d" > "$CONF"
+	CIBLE=$d
+	echo "Disque de sauvegarde : $d"
+}
+
+sauvegarder() {
+	[ -n "$CIBLE" ] || { echo "Aucun disque choisi : plume-sauvegarde (menu) ou --disque DOSSIER" >&2; exit 1; }
+	[ -d "$CIBLE" ] || { note "Disque de sauvegarde non branché ($CIBLE)."; exit 1; }
+	R=$(racine) prec=$(derniere) nouv="$(racine)/$(date +%Y-%m-%d_%H%M)"
+	mkdir -p "$R"
+	note "Sauvegarde en cours…"
+	# FAT/exFAT (clés USB) : ni droits ni liens durs, on copie simplement
+	fs=$(stat -f -c %T "$CIBLE" 2>/dev/null || echo ?)
+	case "$fs" in msdos|vfat|exfat|fuseblk) opts="-rt --modify-window=2" ;; *) opts="-aHAX" ;; esac
+	r=0
+	# shellcheck disable=SC2086
+	rsync $opts --delete ${prec:+--link-dest="$prec"} \
+		--exclude=.cache/ --exclude=.local/share/Trash/ --exclude=.var/app/*/cache/ \
+		--exclude=.local/share/Steam/steamapps/ --exclude=.steam/ --exclude=Games/Heroic/ \
+		--exclude=.local/share/flatpak/ --exclude=.mozilla/firefox/*/cache2/ --exclude=.config/mozilla/firefox/*/cache2/ \
+		"$HOME/" "$nouv.en-cours/" || r=$?
+	# 24 = fichiers disparus pendant la copie (normal, ex. caches) : sauvegarde valable
+	if [ "$r" -ne 0 ] && [ "$r" -ne 24 ]; then
+		rm -rf "$nouv.en-cours"
+		note "Sauvegarde impossible (disque plein ou débranché ?). Les sauvegardes précédentes sont intactes."
+		exit 1
+	fi
+	mv "$nouv.en-cours" "$nouv"
+	# on garde les $GARDER dernières
+	ls -1d "$R"/20* | sort | head -n -"$GARDER" | while read -r v; do rm -rf "$v"; done
+	note "Sauvegarde terminée : $(basename "$nouv") ($(du -sh "$nouv" 2>/dev/null | cut -f1))."
+}
+
+auto() {
+	# toutes les 10 min : disque branché et dernière sauvegarde de plus d'un jour ?
+	while :; do
+		[ -r "$CONF" ] && . "$CONF"
+		if [ -n "$CIBLE" ] && [ -d "$CIBLE" ]; then
+			d=$(derniere)
+			if [ -z "$d" ] || [ -n "$(find "$d" -maxdepth 0 -mmin +1440)" ]; then
+				sauvegarder >/dev/null 2>&1 || true
+			fi
+		fi
+		sleep 600
+	done
+}
+
+menu() {
+	command -v fuzzel >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { liste; exit 0; }
+	d=$(derniere)
+	choix=$({
+		if [ -n "$CIBLE" ]; then
+			echo "ℹ  Disque : $CIBLE$([ -d "$CIBLE" ] || echo ' (non branché)')"
+			echo "ℹ  Dernière : $([ -n "$d" ] && basename "$d" || echo aucune)"
+			echo "▶  Sauvegarder maintenant"
+			[ -n "$d" ] && echo "📂  Retrouver un fichier (ouvrir les sauvegardes)"
+		fi
+		for m in /run/media/"$(id -un)"/*; do [ -d "$m" ] && echo "💾  Utiliser ce disque : $m"; done
+	} | fuzzel --dmenu --prompt "Sauvegarde › " --lines 8 --width 60) || exit 0
+	case "$choix" in
+	"▶"*) sauvegarder ;;
+	"📂"*) exec xdg-open "$(racine)" ;;
+	"💾"*) choisir "${choix#*: }"; sauvegarder ;;
+	esac
+}
+
+liste() {
+	[ -n "$CIBLE" ] || { echo "Aucun disque choisi. Branche un disque externe, puis : plume-sauvegarde --disque /run/media/$(id -un)/NOM"; return; }
+	echo "Disque : $CIBLE"
+	ls -1d "$(racine)"/20* 2>/dev/null | sed 's|.*/|  |' || echo "  (aucune sauvegarde)"
+}
+
+case "${1:-}" in
+"") menu ;;
+maintenant) sauvegarder ;;
+--disque) choisir "${2:?dossier}" ;;
+--auto) auto ;;
+--liste) liste ;;
+*) echo "Usage : plume-sauvegarde [maintenant | --disque DOSSIER | --liste]" >&2; exit 2 ;;
+esac

@@ -1,0 +1,134 @@
+#!/bin/sh
+# Plume (Void) — retour en arrière : instantanés du système (btrfs).
+#   plume-retour                          liste des instantanés
+#   sudo plume-retour creer "description"  nouvel instantané (fait tout seul avant chaque plume-maj)
+#   sudo plume-retour restaurer N         remet le système dans l'état de l'instantané N
+#                                         (tes fichiers personnels, /home, ne bougent pas), puis redémarrage
+#   sudo plume-retour supprimer N
+#   sudo plume-retour --disque /dev/sdX3 restaurer N   depuis la clé USB live, si Plume ne démarre plus
+#                                         (disque chiffré : d'abord « sudo cryptsetup open /dev/sdX4 plume »,
+#                                          puis --disque /dev/mapper/plume)
+#
+# Principe : le système est le sous-volume btrfs « @ ». Un instantané est une copie figée
+# instantanée (elle ne prend de la place que pour ce qui change ensuite). Restaurer, c'est
+# mettre de côté le « @ » actuel et le remplacer par une copie de l'instantané ; au redémarrage,
+# Plume démarre sur cette copie. L'ancien système est gardé jusqu'au retour en arrière suivant.
+# Si /boot est séparé (disque chiffré), son contenu est sauvegardé avec l'instantané et remis aussi.
+set -eu
+GARDER=${PLUME_RETOUR_GARDER:-6}     # instantanés automatiques gardés
+TOP=/run/plume-btrfs                 # racine du disque btrfs (sous-volume 5)
+DEV=""
+
+# --disque : depuis la clé USB live (le système installé n'est pas démarré)
+if [ "${1:-}" = --disque ]; then DEV=${2:?périphérique}; shift 2; export PLUME_RETOUR_HORS_LIGNE=1; fi
+
+racine_btrfs() {
+	if [ -z "$DEV" ]; then
+		[ "$(findmnt -no FSTYPE /)" = btrfs ] || { echo "Le système n'est pas sur btrfs : retour en arrière impossible (installation antérieure à cette fonction)." >&2; exit 1; }
+		DEV=$(findmnt -no SOURCE / | sed 's/\[.*//')
+	fi
+	mkdir -p "$TOP"
+	mountpoint -q "$TOP" || mount -o subvolid=5 "$DEV" "$TOP"
+	[ -d "$TOP/@" ] && [ -d "$TOP/@snapshots" ] || { echo "Disque btrfs sans @ / @snapshots : ce n'est pas un disque Plume." >&2; exit 1; }
+}
+fin() { mountpoint -q "$TOP" 2>/dev/null && umount "$TOP" 2>/dev/null || true; }
+
+liste() {
+	racine_btrfs
+	n=0
+	for d in $(ls "$TOP/@snapshots" 2>/dev/null | sort -n); do
+		[ -f "$TOP/@snapshots/$d/info" ] || continue
+		# shellcheck disable=SC1090
+		DATE="" DESC="" . "$TOP/@snapshots/$d/info"
+		printf '  %3s  %s  %s\n' "$d" "$DATE" "$DESC"
+		n=$((n + 1))
+	done
+	[ "$n" -gt 0 ] || echo "  (aucun instantané)"
+	ls -d "$TOP"/@ancien-* >/dev/null 2>&1 && echo "Ancien système gardé après un retour en arrière : $(cd "$TOP" && ls -d @ancien-* | tr '\n' ' ')"
+	fin
+}
+
+nettoyer_anciens() {
+	# systèmes mis de côté par un retour en arrière : supprimés une fois qu'on n'est plus dessus
+	actuel=$(findmnt -no FSROOT / 2>/dev/null || true)
+	for a in "$TOP"/@ancien-*; do
+		[ -d "$a" ] || continue
+		[ "/${a##*/}" = "$actuel" ] && continue
+		btrfs -q subvolume delete "$a" 2>/dev/null || true
+	done
+}
+
+creer() {
+	desc=${1:-instantané manuel} auto=${2:-}
+	racine_btrfs
+	nettoyer_anciens
+	n=$(( $(ls "$TOP/@snapshots" 2>/dev/null | sort -n | tail -1 || echo 0) + 1 ))
+	mkdir -p "$TOP/@snapshots/$n"
+	btrfs -q subvolume snapshot -r "$TOP/@" "$TOP/@snapshots/$n/racine"
+	# /boot séparé (disque chiffré) : noyaux et initramfs gardés avec l'instantané
+	if [ -z "${PLUME_RETOUR_HORS_LIGNE:-}" ] && mountpoint -q /boot; then
+		tar -C /boot --exclude=./efi -cf "$TOP/@snapshots/$n/boot.tar" .
+	fi
+	{
+		echo "DATE='$(date '+%d/%m/%Y %H:%M')'"
+		echo "DESC='$(printf '%s' "$desc" | tr -d "'")'"
+		echo "AUTO=${auto:+oui}"
+		echo "NOYAU='$(uname -r)'"
+	} > "$TOP/@snapshots/$n/info"
+	echo "Instantané $n créé : $desc"
+	# on ne garde que les $GARDER derniers instantanés automatiques
+	if [ -n "$auto" ]; then
+		for d in $(grep -l '^AUTO=oui' "$TOP"/@snapshots/*/info 2>/dev/null | xargs -r -n1 dirname | xargs -r -n1 basename | sort -n | head -n -"$GARDER"); do
+			btrfs -q subvolume delete "$TOP/@snapshots/$d/racine" && rm -rf "${TOP:?}/@snapshots/$d"
+		done
+	fi
+	fin
+}
+
+restaurer() {
+	n=${1:?"numéro de l'instantané (plume-retour pour la liste)"}
+	racine_btrfs
+	[ -d "$TOP/@snapshots/$n/racine" ] || { echo "Instantané $n introuvable." >&2; fin; exit 1; }
+	# shellcheck disable=SC1090
+	DATE="" DESC="" . "$TOP/@snapshots/$n/info"
+	if [ "${2:-}" != --oui ]; then
+		printf 'Remettre le système dans l'"'"'état du %s (%s) ?\nTes fichiers personnels ne changent pas. Redémarrage ensuite. [o/N] ' "$DATE" "$DESC"
+		read -r r; case "$r" in o|O|y|Y) ;; *) echo "Annulé."; fin; exit 0 ;; esac
+	fi
+	date=$(date +%Y%m%d-%H%M%S)
+	mv "$TOP/@" "$TOP/@ancien-$date"
+	btrfs -q subvolume snapshot "$TOP/@snapshots/$n/racine" "$TOP/@"
+	if [ -f "$TOP/@snapshots/$n/boot.tar" ] && [ -n "${PLUME_RETOUR_HORS_LIGNE:-}" ] && [ -z "${PLUME_BOOT:-}" ]; then
+		echo "Attention : /boot n'est pas remis (indique sa partition : PLUME_BOOT=/dev/sdX3 sudo -E plume-retour …)."
+	elif [ -f "$TOP/@snapshots/$n/boot.tar" ]; then
+		B=/boot
+		if [ -n "${PLUME_BOOT:-}" ]; then B=/run/plume-boot; mkdir -p $B; mount "$PLUME_BOOT" $B; fi
+		find "$B" -mindepth 1 -maxdepth 1 ! -name efi -exec rm -rf {} +
+		tar -C "$B" -xpf "$TOP/@snapshots/$n/boot.tar"
+		if [ -n "${PLUME_BOOT:-}" ]; then umount $B; fi
+	fi
+	sync
+	fin
+	echo "Système remis à l'état du $DATE ($DESC)."
+	echo "L'état d'avant est gardé (@ancien-$date) jusqu'au prochain instantané."
+	echo "Redémarre maintenant : sudo reboot"
+}
+
+supprimer() {
+	n=${1:?numéro}
+	racine_btrfs
+	[ -d "$TOP/@snapshots/$n/racine" ] || { echo "Instantané $n introuvable." >&2; fin; exit 1; }
+	btrfs -q subvolume delete "$TOP/@snapshots/$n/racine" && rm -rf "${TOP:?}/@snapshots/$n"
+	echo "Instantané $n supprimé."
+	fin
+}
+
+[ "${1:-}" = "" ] || [ "$(id -u)" -eq 0 ] || exec sudo "$0" ${DEV:+--disque "$DEV"} "$@"
+case "${1:-}" in
+"") [ "$(id -u)" -eq 0 ] || exec sudo "$0" ${DEV:+--disque "$DEV"}; echo "Instantanés du système (plume-retour restaurer N pour revenir) :"; liste ;;
+creer) creer "${2:-}" ;;
+--auto) creer "${2:-avant mise à jour}" auto ;;
+restaurer) restaurer "${2:-}" "${3:-}" ;;
+supprimer) supprimer "${2:-}" ;;
+*) echo "Usage : plume-retour [creer \"description\" | restaurer N | supprimer N] [--disque DEV]" >&2; exit 2 ;;
+esac

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Retour en arrière
+Comment=Remettre le système dans l'état d'avant une mise à jour
+Exec=plume-terminal -T "Retour en arrière" sh -c "sudo plume-retour; echo; echo 'Pour revenir : sudo plume-retour restaurer N'; exec bash"
+Icon=document-revert
+Terminal=false
+Categories=Settings;System;
+Keywords=retour;restaurer;instantané;snapshot;mise à jour;rollback;
