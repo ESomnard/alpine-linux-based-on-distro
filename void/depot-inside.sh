@@ -72,12 +72,12 @@ paquet plume-logitheque logitheque "Logithèque : installer des applications" "$
 
 # scripts Plume : communs, remplacés par leur version Void quand elle existe
 rm -rf "$D" && mkdir -p "$D/usr/bin"
-for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
+for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
 	src=$W/rootfs/etc/plume/conf/$f
 	[ -f "$W/void/rootfs/etc/plume/conf/$f" ] && src=$W/void/rootfs/etc/plume/conf/$f
 	install -m755 "$src" "$D/usr/bin/$f"
 done
-for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour; do
+for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour plume-raccourcis; do
 	install -Dm644 "$W/void/$d.desktop" "$D/usr/share/applications/$d.desktop"
 done
 finir plume-outils "Scripts Plume : mises à jour, pare-feu, thème, écrans, jeux, manettes, émulation, lanceurs" "nftables>=0 sudo>=0 jq>=0" noarch

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Raccourcis
+Comment=Tous les raccourcis clavier en boutons (Super + F1)
+Exec=plume-raccourcis
+Icon=input-keyboard
+Terminal=false
+Categories=Settings;
+Keywords=raccourcis;clavier;fenêtre;fermer;boutons;shortcuts;aide;

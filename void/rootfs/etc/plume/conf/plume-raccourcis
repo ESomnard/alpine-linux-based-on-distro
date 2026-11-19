@@ -1,0 +1,128 @@
+#!/bin/sh
+# Plume (Void) — tous les raccourcis clavier en boutons, rangés par onglets.
+#   plume-raccourcis            ouvre le panneau (ou le ferme s'il est ouvert) — Super + F1
+#   plume-raccourcis --faire X  exécute l'action X (appelé par les boutons)
+# Les actions sur une fenêtre visent celle qui était active à l'ouverture du panneau.
+set -u
+RUN="${XDG_RUNTIME_DIR:-/tmp}"
+PIDS="$RUN/plume-raccourcis.pids"
+CIBLE="$RUN/plume-raccourcis.fenetre"
+MOI=$(command -v plume-raccourcis || echo "$0")
+
+# action | onglet | bouton | raccourci | commande sway (comme dans ~/.config/sway/config)
+# onglet : 1 fenêtre, 2 applications, 3 bureaux, 4 son / écran / système
+ACTIONS='fermer|1|✕  Fermer la fenêtre|Alt+F4 · Super+Maj+Q|kill
+plein|1|▣  Plein écran (agrandir / revenir)|Super+F|fullscreen toggle
+libre|1|❐  Fenêtre libre / fixée|Super+Maj+Espace|floating toggle
+mgauche|1|◧  Moitié gauche de l'"'"'écran|Super+Ctrl+←|layout splith, move left
+mdroite|1|◨  Moitié droite de l'"'"'écran|Super+Ctrl+→|layout splith, move right
+cote|1|◫  Côte à côte (partager l'"'"'écran)|bouton du dock|layout splith
+dessous|1|⊟  L'"'"'une sous l'"'"'autre|bouton du dock|layout splitv
+onglets|1|▭  Fenêtres en onglets|Super+W|layout tabbed
+bascule|1|⇄  Changer la disposition|Super+T|layout toggle split
+splith|1|⇥  Prochaine fenêtre à côté|Super+H|splith
+splitv|1|⤓  Prochaine fenêtre en dessous|Super+V|splitv
+taille|1|⇔  Redimensionner (flèches, puis Entrée)|Super+R|mode resize
+fg|1|←  Aller à la fenêtre de gauche|Super+←|focus left
+fd|1|→  Aller à la fenêtre de droite|Super+→|focus right
+fh|1|↑  Aller à la fenêtre du haut|Super+↑|focus up
+fb|1|↓  Aller à la fenêtre du bas|Super+↓|focus down
+dg|1|⇐  Déplacer la fenêtre à gauche|Super+Maj+←|move left
+dd|1|⇒  Déplacer la fenêtre à droite|Super+Maj+→|move right
+dh|1|⇑  Déplacer la fenêtre en haut|Super+Maj+↑|move up
+db|1|⇓  Déplacer la fenêtre en bas|Super+Maj+↓|move down
+terminal|2|>_  Terminal|Super+Entrée|exec plume-terminal
+foot|2|>_  Terminal simple (foot)|Super+Maj+Entrée|exec foot
+menu|2|⣿  Toutes les applications|Super+D · Super+A|exec plume-menu
+firefox|2|◎  Firefox|Super+B|exec firefox
+fichiers|2|▤  Fichiers|Super+E|exec pcmanfm
+pilotage|2|◈  Poste de pilotage|Super+X|exec plume-term --hud -a plume-pilotage
+verrou|2|⚷  Verrouiller l'"'"'écran|Super+Échap|exec plume-hud -f || swaylock -f -c 1e1e2e
+eteindre|2|◍  Éteindre / redémarrer / veille|Super+Maj+E|exec swaynag -t warning -m '"'"'Que faire ?'"'"' -B '"'"'Éteindre'"'"' '"'"'sudo -n /sbin/poweroff'"'"' -B '"'"'Redémarrer'"'"' '"'"'sudo -n /sbin/reboot'"'"' -B '"'"'Veille'"'"' '"'"'sudo -n /usr/sbin/zzz'"'"' -B '"'"'Déconnexion'"'"' '"'"'swaymsg exit'"'"'
+recharger|2|↻  Recharger la configuration|Super+Maj+C|reload
+b1|3|Aller au bureau 1|Super+1|workspace number 1
+b2|3|Aller au bureau 2|Super+2|workspace number 2
+b3|3|Aller au bureau 3|Super+3|workspace number 3
+b4|3|Aller au bureau 4|Super+4|workspace number 4
+b5|3|Aller au bureau 5|Super+5|workspace number 5
+b6|3|Aller au bureau 6|Super+6|workspace number 6
+b7|3|Aller au bureau 7|Super+7|workspace number 7
+b8|3|Aller au bureau 8|Super+8|workspace number 8
+b9|3|Aller au bureau 9|Super+9|workspace number 9
+b10|3|Aller au bureau 10|Super+0|workspace number 10
+e1|3|Envoyer la fenêtre au bureau 1|Super+Maj+1|move container to workspace number 1
+e2|3|Envoyer la fenêtre au bureau 2|Super+Maj+2|move container to workspace number 2
+e3|3|Envoyer la fenêtre au bureau 3|Super+Maj+3|move container to workspace number 3
+e4|3|Envoyer la fenêtre au bureau 4|Super+Maj+4|move container to workspace number 4
+e5|3|Envoyer la fenêtre au bureau 5|Super+Maj+5|move container to workspace number 5
+e6|3|Envoyer la fenêtre au bureau 6|Super+Maj+6|move container to workspace number 6
+e7|3|Envoyer la fenêtre au bureau 7|Super+Maj+7|move container to workspace number 7
+e8|3|Envoyer la fenêtre au bureau 8|Super+Maj+8|move container to workspace number 8
+e9|3|Envoyer la fenêtre au bureau 9|Super+Maj+9|move container to workspace number 9
+e10|3|Envoyer la fenêtre au bureau 10|Super+Maj+0|move container to workspace number 10
+volp|4|♪  Volume +|touche Volume +|exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+volm|4|♪  Volume −|touche Volume −|exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+muet|4|♪  Son coupé / remis|touche Muet|exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+micro|4|◉  Micro coupé / remis|touche Micro|exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+lump|4|☀  Luminosité +|touche Luminosité +|exec brightnessctl set 5%+
+lumm|4|☼  Luminosité −|touche Luminosité −|exec brightnessctl set 5%-
+capzone|4|⬚  Capture d'"'"'une zone (copiée)|Impr|exec grim -g "$(slurp)" - | wl-copy
+capecran|4|▢  Capture de l'"'"'écran (fichier)|Maj+Impr|exec grim ~/capture-$(date +%Y%m%d-%H%M%S).png
+clavier|4|⌨  Changer de clavier (fr / us)|Alt+Maj|input type:keyboard xkb_switch_layout next
+pinyin|4|拼  Saisie chinoise (pinyin)|Super+Espace|exec ~/.config/sway/pinyin-toggle.sh
+nuit|4|☾  Lumière du soir|Super+N|exec plume-nuit
+loupe|4|⊕  Loupe|Super+Alt+Z|exec plume-accessibilite loupe
+lecteur|4|◌  Lecteur d'"'"'écran|Super+Alt+S|exec plume-accessibilite lecteur
+clavierecran|4|⌨  Clavier à l'"'"'écran|Super+Alt+K|exec plume-accessibilite clavier'
+
+fermer_panneau() {
+	[ -r "$PIDS" ] && kill $(cat "$PIDS") 2>/dev/null
+	rm -f "$PIDS"
+}
+
+if [ "${1:-}" = --faire ]; then
+	cmd=$(printf '%s\n' "$ACTIONS" | grep -m1 "^${2:-}|" | cut -d'|' -f5-)
+	[ -n "$cmd" ] || exit 1
+	fermer_panneau
+	sleep 0.2 # le temps que le panneau disparaisse (captures d'écran)
+	id=$(cat "$CIBLE" 2>/dev/null)
+	[ -n "$id" ] && swaymsg -q "[con_id=$id] focus" 2>/dev/null
+	exec swaymsg -q -- "$cmd"
+fi
+
+# déjà ouvert : on le ferme (même raccourci pour ouvrir et fermer)
+if [ -r "$PIDS" ] && kill -0 $(cat "$PIDS") 2>/dev/null; then
+	fermer_panneau
+	exit 0
+fi
+
+command -v yad >/dev/null || { notify-send -a Plume "Raccourcis" "yad manque : sudo xbps-install yad" 2>/dev/null; exit 1; }
+
+# fenêtre active (jamais un bureau entier : « Fermer » ne doit fermer qu'une fenêtre)
+swaymsg -t get_tree 2>/dev/null | jq -r 'first(.. | objects | select(.focused == true and (.type == "con" or .type == "floating_con")) | .id) // empty' > "$CIBLE"
+
+CLE=$(( $$ + 41000 ))
+onglet() { # onglet N -> un formulaire de boutons dans l'onglet N
+	n=$1
+	set --
+	TAB=$(printf '\t')
+	lignes=$(printf '%s\n' "$ACTIONS" | awk -F'|' -v n="$n" -v t="$TAB" '$2==n { print $1 t $3 t $4 }')
+	while IFS="$TAB" read -r cle bouton raccourci; do
+		set -- "$@" --field "$bouton   —   $raccourci:FBTN" "$MOI --faire $cle"
+	done <<EOF
+$lignes
+EOF
+	yad --plug="$CLE" --tabnum="$n" --form --columns=2 --scroll "$@" >/dev/null 2>&1 &
+	echo $! >> "$PIDS"
+}
+
+: > "$PIDS"
+for n in 1 2 3 4; do onglet "$n"; done
+yad --notebook --key="$CLE" --title "Raccourcis Plume" --window-icon input-keyboard \
+	--width 900 --height 560 --center \
+	--text "<b>Tous les raccourcis en boutons.</b>  Clique : l'action s'applique à la fenêtre que tu utilisais." \
+	--tab "Fenêtre" --tab "Applications" --tab "Bureaux" --tab "Son, écran, accessibilité" \
+	--button "Fermer:1" >/dev/null 2>&1 &
+echo $! >> "$PIDS"
+wait $!
+fermer_panneau
