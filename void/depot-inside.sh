@@ -41,6 +41,8 @@ paquet() {
 	EXTRA=""
 	finir "$nom" "$desc" "$dep" "$arch"
 }
+# ouverts depuis l'appli Paramètres (et la barre), cachés de la grille des applis
+REGLAGES="plume-wifi plume-son plume-bluetooth plume-fonds plume-ecrans plume-nuit plume-batterie plume-vpn plume-accessibilite plume-raccourcis plume-notifications plume-sauvegarde plume-retour"
 finir() {
 	nom=$1 desc=$2 dep=$3 arch=$4
 	# logos Plume (void/icones, paquet plume-icones) à la place des icônes génériques
@@ -48,6 +50,8 @@ finir() {
 		[ -f "$f" ] || continue
 		n=$(basename "$f" .desktop)
 		[ -f "$W/void/icones/$n.svg" ] && sed -i "s/^Icon=.*/Icon=$n/" "$f"
+		# réglages : regroupés dans l'appli Paramètres, plus en double dans « Toutes les applications »
+		case " $REGLAGES " in *" $n "*) grep -q '^NoDisplay=' "$f" || echo "NoDisplay=true" >> "$f" ;; esac
 	done
 	(cd "$OUT" && xbps-create -q -A "$arch" -n "$nom-${VERSION}_$REL" -s "$desc" \
 		-l GPL-3.0-or-later -H "https://github.com/ESomnard/alpine-linux-based-on-distro" \
@@ -68,6 +72,7 @@ mkdir -p "$D/usr/share/plume" && "$D/usr/bin/plume-wall" "$D/usr/share/plume/wal
 finir plume-hud "Écran de connexion et de verrouillage HUD" "$RT pam>=0 greetd>=0 cage>=0" $ARCH
 
 paquet plume-shell shell "Barre et dock HUD (sway)" "$RT librsvg>=0"
+paquet plume-parametres void/parametres "Paramètres : tous les réglages de Plume au même endroit" "$RT librsvg>=0"
 paquet plume-alimentation void/alimentation "Écran Éteindre, Redémarrer, Veille, Déconnexion, Verrouiller" "$RT"
 paquet plume-icones-bureau void/bureau "Fichiers du Bureau sur le bureau (ouvrir, renommer, corbeille…)" "$RT librsvg>=0 gdk-pixbuf>=0 xdg-utils>=0 wl-clipboard>=0"
 paquet plume-term term "Terminal HUD et poste de pilotage" "$RT libvterm>=0"
@@ -127,7 +132,7 @@ finir plume-reglages "Réglages de Plume (dock, sway, portables NVIDIA, AppArmor
 
 rm -rf "$D" && mkdir -p "$D"
 finir plume-bureau "Bureau Plume complet (composants HUD)" \
-	"plume-hud>=0 plume-reglages>=0 plume-alimentation>=0 plume-icones>=0 plume-icones-bureau>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-pastilles-gtk>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
+	"plume-hud>=0 plume-parametres>=0 plume-reglages>=0 plume-alimentation>=0 plume-icones>=0 plume-icones-bureau>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-pastilles-gtk>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
 
 echo "==> Index et signature"
 cd "$OUT"

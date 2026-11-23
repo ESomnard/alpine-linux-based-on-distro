@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Paramètres
+Comment=Tous les réglages de Plume : wifi, écrans, son, apparence, mises à jour…
+Exec=plume-parametres
+Icon=plume-parametres
+Terminal=false
+Categories=Settings;System;
+Keywords=réglages;préférences;paramètres;configuration;settings;

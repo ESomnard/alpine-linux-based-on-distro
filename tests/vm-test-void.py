@@ -118,7 +118,7 @@ vm.login("Test.Plume", PW)
 step("Connexion de l'utilisateur OK")
 ok = True
 ok &= vm.check("glibc", "ldd --version | head -1", r"GNU libc|GLIBC")
-ok &= vm.check("14 composants Plume installés", "xbps-query -l | grep -c ' plume-'", r"\b14\b")
+ok &= vm.check("composants Plume installés (14 ou plus)", "xbps-query -l | grep -c ' plume-'", r"\b(1[4-9]|2[0-9])\b")
 for s in ("dbus", "seatd", "greetd", "nftables", "iwd", "bluetoothd", "zramen", "polkitd", "cupsd", "avahi-daemon", "power-profiles-daemon"):
     ok &= vm.check(f"service {s}", f"sudo -n true 2>/dev/null; echo {PW} | sudo -S sv status {s}", r"run:")
 ok &= vm.check("écran de connexion plume-hud (greetd + cage)", "pgrep -af 'plume-hud --greeter'", r"plume-hud")

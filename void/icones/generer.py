@@ -89,4 +89,9 @@ icon('plume-raccourcis', '#64748b', '#273244', '''    <rect x="28" y="42" width=
 icon('plume-notifications', '#f43f5e', '#f97316', '''    <path d="M64 32c-13 0-22 10-22 23v14l-7 11h58l-7-11V55c0-13-9-23-22-23z" fill="#fff" fill-opacity=".18"/>
     <path d="M56 88a8 8 0 0 0 16 0"/>
     <circle cx="86" cy="40" r="8" fill="#fff" stroke="none"/>''')
+icon('plume-parametres', '#8e9aab', '#3b4557', '''    <circle cx="64" cy="64" r="13" stroke-width="7"/>
+    <path d="M64 30v10M64 88v10M30 64h10M88 64h10M40 40l7 7M81 81l7 7M40 88l7-7M81 47l7-7" stroke-width="8"/>
+    <circle cx="64" cy="64" r="26" stroke-width="6"/>''')
+icon('plume-maj', '#10b981', '#0e7490', '''    <circle cx="64" cy="64" r="32" stroke-width="6"/>
+    <path d="M64 82V48M50 60l14-14 14 14"/>''')
 print(len(os.listdir(OUT)), 'icônes')
