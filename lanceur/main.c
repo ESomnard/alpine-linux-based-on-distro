@@ -16,6 +16,12 @@
 #include <time.h>
 #include <unistd.h>
 #include <xkbcommon/xkbcommon-compose.h>
+#ifdef PLUME_VOID
+#include <wayland-cursor.h>
+/* flèche de la souris (Plume Void) : sans image, le compositeur cacherait le curseur */
+static struct wl_cursor_theme *cursor_theme;
+static struct wl_surface *cursor_surface;
+#endif
 
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
@@ -355,7 +361,18 @@ static bool in(struct rect r, double x, double y)
 static void p_enter(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *sf, wl_fixed_t x, wl_fixed_t y)
 {
 	(void)d; (void)sf;
+#ifdef PLUME_VOID
+	struct wl_cursor *c = cursor_theme ? wl_cursor_theme_get_cursor(cursor_theme, "left_ptr") : NULL;
+	if (c && c->image_count) {
+		struct wl_cursor_image *img = c->images[0];
+		wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(img), 0, 0);
+		wl_surface_damage(cursor_surface, 0, 0, img->width, img->height);
+		wl_surface_commit(cursor_surface);
+		wl_pointer_set_cursor(p, serial, cursor_surface, img->hotspot_x, img->hotspot_y);
+	}
+#else
 	wl_pointer_set_cursor(p, serial, NULL, 0, 0); /* le compositeur garde sa flèche */
+#endif
 	L.px = wl_fixed_to_double(x);
 	L.py = wl_fixed_to_double(y);
 	L.dirty = true;
@@ -503,6 +520,11 @@ int main(int argc, char **argv)
 
 	apps_load();
 
+#ifdef PLUME_VOID
+	const char *xs = getenv("XCURSOR_SIZE");
+	cursor_theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), xs && atoi(xs) > 0 ? atoi(xs) : 24, L.shm);
+	cursor_surface = wl_compositor_create_surface(L.compositor);
+#endif
 	L.surface = wl_compositor_create_surface(L.compositor);
 	L.layer = zwlr_layer_shell_v1_get_layer_surface(L.layer_shell, L.surface, NULL,
 							ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "plume-lanceur");

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Plume Linux — commande d'aide.
+#   plume-linux help      tous les raccourcis clavier (aussi : aide, raccourcis)
+#   plume-linux version   version de Plume installée
+case "${1:-}" in
+help | --help | -h | aide | raccourcis)
+	exec plume-raccourcis --texte ;;
+version | --version | -v)
+	v=$(xbps-query -p pkgver plume-bureau 2>/dev/null | sed 's/^plume-bureau-//; s/_.*//')
+	echo "Plume Linux (Void) ${v:-?}" ;;
+*)
+	echo "Plume Linux — commandes :"
+	echo "  plume-linux help       tous les raccourcis clavier"
+	echo "  plume-linux version    version de Plume"
+	[ -z "${1:-}" ] || { echo "Commande inconnue : $1" >&2; exit 1; } ;;
+esac

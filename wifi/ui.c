@@ -1,6 +1,7 @@
 /* plume-wifi — dessin du panneau et clics. */
 #include "wifi.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -197,9 +198,10 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	cairo_move_to(cr, 0, HEADER_H - 0.5);
 	cairo_line_to(cr, W, HEADER_H - 0.5);
 	glow_stroke(cr, C_LINE, 1, 0.6);
-	txt(cr, 20, 800, 0.2, C_BRIGHT, 1, MARGIN, HEADER_H / 2, 0, 0, "◇ WIFI");
+	pf_draw(cr, MARGIN, HEADER_H / 2, A.px, A.py);
+	txt(cr, 20, 800, 0.2, C_BRIGHT, 1, MARGIN + PF_LARGEUR, HEADER_H / 2, 0, 0, "◇ WIFI");
 	if (A.dev[0])
-		txt(cr, 11, 400, 0.1, C_MUTED, 1, MARGIN + 106, HEADER_H / 2 + 2, 0, 0, A.dev);
+		txt(cr, 11, 400, 0.1, C_MUTED, 1, MARGIN + PF_LARGEUR + 106, HEADER_H / 2 + 2, 0, 0, A.dev);
 	double bx = W - MARGIN;
 	if (A.have_dev) {
 		struct rect r = { bx - 112, HEADER_H / 2 - 15, 112, 30 };
@@ -391,6 +393,11 @@ static void do_connect(int i)
 
 void ui_click(double x, double y)
 {
+	switch (pf_clic(x, y)) {
+	case 0: break;
+	case 1: A.running = false; return;
+	default: return;
+	}
 	for (int k = A.nhits - 1; k >= 0; k--) {
 		struct hit *h = &A.hits[k];
 		if (x < h->r.x || x > h->r.x + h->r.w || y < h->r.y || y > h->r.y + h->r.h)
@@ -417,6 +424,8 @@ void ui_click(double x, double y)
 		A.dirty = true;
 		return;
 	}
+	if (y < HEADER_H) /* double-clic dans le vide de l'en-tête : plein écran */
+		pf_entete_clic(x, y);
 }
 
 void ui_key(xkb_keysym_t sym, const char *utf8, bool ctrl)

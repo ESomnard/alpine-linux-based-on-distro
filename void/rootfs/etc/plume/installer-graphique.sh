@@ -13,13 +13,14 @@ DISQUES=$(lsblk -dno NAME,SIZE,MODEL,TYPE | awk -v l="$LIVE" '$NF=="disk" && $1!
 	$NF=""; n=$1; $1=""; sub(/^ +/,""); sub(/ +$/,""); printf "%s%s — %s", (c++ ? "!" : ""), n, $0 }')
 [ -n "$DISQUES" ] || { yad --title "$TITRE" --image dialog-error --text "Aucun disque trouvé pour installer Plume." --button OK:0 --center; exit 1; }
 
-U="" M="plume" F="Europe/Paris" C="FALSE" A="TRUE" K="fr"
+N="" U="" M="plume" F="Europe/Paris" C="FALSE" A="TRUE" K="fr"
 while :; do
 	R=$(yad --title "$TITRE" --window-icon system-software-install --center --width 560 \
 		--form --separator='\n' --item-separator='!' \
 		--text "<big><b>Installer Plume Linux sur ce PC</b></big>\n\nLe disque choisi sera <b>entièrement effacé</b>. Durée : 5 à 15 minutes, sans Internet." \
 		--field "Disque:CB" "$DISQUES" \
-		--field "Ton identifiant (minuscules, sans espace)" "$U" \
+		--field "Ton nom (affiché, accents et espaces permis)" "$N" \
+		--field "Ton identifiant pour te connecter (majuscules permises, sans espace)" "$U" \
 		--field "Mot de passe:H" "" \
 		--field "Mot de passe (encore une fois):H" "" \
 		--field "Nom de l'ordinateur" "$M" \
@@ -29,11 +30,11 @@ while :; do
 		--field "Phrase secrète du chiffrement (8 caractères min., demandée à chaque démarrage):H" "" \
 		--field "Garder les applications (Firefox, lecteur vidéo…):CHK" "$A" \
 		--button "Annuler:1" --button "Continuer:0") || exit 0
-	{ read -r D; read -r U; read -r P1; read -r P2; read -r M; read -r K; read -r F; read -r C; read -r PH; read -r A; } <<EOF
+	{ read -r D; read -r N; read -r U; read -r P1; read -r P2; read -r M; read -r K; read -r F; read -r C; read -r PH; read -r A; } <<EOF
 $R
 EOF
 	DISQUE=/dev/${D%% *}
-	echo "$U" | grep -Eq '^[a-z_][a-z0-9_-]*$' || { erreur "Identifiant invalide : minuscules, chiffres, - ou _ (ex. : marie)."; continue; }
+	echo "$U" | grep -Eq '^[A-Za-z_][A-Za-z0-9._-]{0,31}$' || { erreur "Identifiant invalide : lettres, chiffres, . - ou _, sans espace ni accent (ex. : Marie)."; continue; }
 	[ -n "$P1" ] || { erreur "Choisis un mot de passe."; continue; }
 	[ "$P1" = "$P2" ] || { erreur "Les deux mots de passe sont différents."; continue; }
 	echo "$M" | grep -Eq '^[a-zA-Z0-9-]+$' || M=plume
@@ -52,6 +53,7 @@ umask 077
 CONF=$(mktemp /tmp/plume-installer.XXXXXX)
 {
 	echo "DISQUE=$(q "$DISQUE")"
+	echo "NOM_COMPLET=$(q "$N")"
 	echo "UTILISATEUR=$(q "$U")"
 	echo "MOT_DE_PASSE=$(q "$P1")"
 	echo "CLAVIER=$(q "$K")"

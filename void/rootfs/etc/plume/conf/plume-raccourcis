@@ -2,6 +2,7 @@
 # Plume (Void) — tous les raccourcis clavier en boutons, rangés par onglets.
 #   plume-raccourcis            ouvre le panneau (ou le ferme s'il est ouvert) — Super + F1
 #   plume-raccourcis --faire X  exécute l'action X (appelé par les boutons)
+#   plume-raccourcis --texte    la liste en texte (plume-linux help)
 # Les actions sur une fenêtre visent celle qui était active à l'ouverture du panneau.
 set -u
 RUN="${XDG_RUNTIME_DIR:-/tmp}"
@@ -16,8 +17,8 @@ plein|1|▣  Plein écran (agrandir / revenir)|Super+F|fullscreen toggle
 libre|1|❐  Fenêtre libre / fixée|Super+Maj+Espace|floating toggle
 mgauche|1|◧  Moitié gauche de l'"'"'écran|Super+Ctrl+←|layout splith, move left
 mdroite|1|◨  Moitié droite de l'"'"'écran|Super+Ctrl+→|layout splith, move right
-cote|1|◫  Côte à côte (partager l'"'"'écran)|bouton du dock|layout splith
-dessous|1|⊟  L'"'"'une sous l'"'"'autre|bouton du dock|layout splitv
+cote|1|◫  Côte à côte (partager l'"'"'écran)|Super+F1 (ce panneau)|layout splith
+dessous|1|⊟  L'"'"'une sous l'"'"'autre|Super+F1 (ce panneau)|layout splitv
 onglets|1|▭  Fenêtres en onglets|Super+W|layout tabbed
 bascule|1|⇄  Changer la disposition|Super+T|layout toggle split
 splith|1|⇥  Prochaine fenêtre à côté|Super+H|splith
@@ -79,6 +80,25 @@ fermer_panneau() {
 	[ -r "$PIDS" ] && kill $(cat "$PIDS") 2>/dev/null
 	rm -f "$PIDS"
 }
+
+if [ "${1:-}" = --texte ]; then
+	# couleurs seulement dans un vrai terminal
+	if [ -t 1 ]; then T=$(printf '\033[1;36m') K=$(printf '\033[1m') Z=$(printf '\033[0m'); else T="" K="" Z=""; fi
+	printf '%sRaccourcis clavier de Plume Linux%s   (Super = touche Windows ; en boutons : Super + F1)\n' "$K" "$Z"
+	# C.UTF-8 : awk compte les caractères (accents, flèches), pas les octets -> colonnes alignées
+	printf '%s\n' "$ACTIONS" | LC_ALL=C.UTF-8 awk -F'|' -v T="$T" -v K="$K" -v Z="$Z" '
+		BEGIN { titre[1] = "FENÊTRE"; titre[2] = "APPLICATIONS"; titre[3] = "BUREAUX"; titre[4] = "SON, ÉCRAN, ACCESSIBILITÉ" }
+		$1 ~ /^[be]([2-9]|10)$/ { next }              # bureaux 2 à 10 : résumés sur une ligne
+		{
+			if ($2 != o) { printf "\n%s%s%s\n", T, titre[$2], Z; o = $2 }
+			nom = $3; sub(/^[^ ]+  /, "", nom)          # sans le symbole du bouton
+			r = $4
+			if ($1 == "b1") { r = "Super+1 … Super+0"; nom = "Aller au bureau 1 à 10" }
+			if ($1 == "e1") { r = "Super+Maj+1 … 0"; nom = "Envoyer la fenêtre au bureau 1 à 10" }
+			printf "  %s%-24s%s %s\n", K, r, Z, nom
+		}'
+	exit 0
+fi
 
 if [ "${1:-}" = --faire ]; then
 	cmd=$(printf '%s\n' "$ACTIONS" | grep -m1 "^${2:-}|" | cut -d'|' -f5-)

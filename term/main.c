@@ -1,5 +1,6 @@
 /* plume-term — fenêtre Wayland, clavier, souris, presse-papiers, boucle. */
 #include "term.h"
+#include "fenetre.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -958,6 +959,10 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t time, wl_fixed_t x,
 	double ox = A.px, oy = A.py;
 	A.px = wl_fixed_to_double(x);
 	A.py = wl_fixed_to_double(y);
+	if (pf_mouvement(A.px, A.py)) { /* barre d'onglets tenue et souris bougée : la fenêtre suit */
+		xdg_toplevel_move(A.toplevel, A.seat, pf_serie);
+		return;
+	}
 	if (A.hud && hud_hover_changed(ox, oy, A.px, A.py))
 		A.dirty = true;
 	update_hover_cursor();
@@ -986,9 +991,24 @@ static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t ti
 	(void)d; (void)p; (void)time;
 	A.last_serial = serial;
 	bool down = state == WL_POINTER_BUTTON_STATE_PRESSED;
+	if (button == BTN_LEFT) {
+		if (down)
+			pf_serie = serial;
+		else
+			pf_relache();
+	}
 	double x = A.px, y = A.py;
 	struct tab *t = tab_active();
 	A.dirty = true;
+
+	/* pastilles de fenêtre (rouge : fermer, jaune : réduire, verte : plein écran) */
+	if (down && button == BTN_LEFT) {
+		switch (term_pastilles_clic(x, y)) {
+		case 0: break;
+		case 1: A.running = false; return;
+		default: return;
+		}
+	}
 
 	/* mode HUD : clics dans les panneaux (fichiers, clavier) */
 	bool in_term_col = x >= A.r_grid.x - A.pad * 2 && x <= A.r_grid.x + A.r_grid.w + A.pad * 2 &&
@@ -1017,6 +1037,8 @@ static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t ti
 		}
 		if (in(A.r_new, x, y) && button == BTN_LEFT)
 			new_tab();
+		else if (button == BTN_LEFT)
+			term_entete_clic(x, y);
 		return;
 	}
 	if (!t)

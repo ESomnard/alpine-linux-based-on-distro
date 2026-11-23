@@ -218,4 +218,8 @@ void font_setup(double px);
 void layout_grid(int W, int H, int *rows, int *cols);
 void render_frame(cairo_t *cr, int W, int H);
 
+/* render.c : pastilles de fenêtre (0 rien, 1 fermer, 2 réduite, 3 plein écran) */
+int term_pastilles_clic(double x, double y);
+void term_entete_clic(double x, double y);
+
 #endif

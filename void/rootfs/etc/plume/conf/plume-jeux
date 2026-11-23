@@ -61,6 +61,7 @@ pc() {
 
 	echo; echo "==> Heroic (Epic, GOG) et ProtonUp-Qt depuis Flathub (pour $U)"
 	su "$U" -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+		{ flatpak update --user --appstream -y --noninteractive >/dev/null 2>&1 || true; } &&
 		flatpak install --user -y --noninteractive flathub $FLATHUB_PC"
 	# Flatpak : accès aux manettes et aux dossiers de jeux
 	su "$U" -c "flatpak override --user --device=all com.heroicgameslauncher.hgl" || true

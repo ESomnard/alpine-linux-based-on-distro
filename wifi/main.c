@@ -16,6 +16,7 @@
 #include <wayland-cursor.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "fenetre.h"
 
 struct app A;
 static struct wl_cursor_theme *cursor_theme;
@@ -229,13 +230,19 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl
 	(void)d; (void)p; (void)t;
 	A.px = wl_fixed_to_double(x);
 	A.py = wl_fixed_to_double(y);
+	if (pf_mouvement(A.px, A.py)) /* en-tête tenu et souris bougée : la fenêtre suit */
+		xdg_toplevel_move(A.toplevel, A.seat, pf_serie);
 	A.dirty = true;
 }
 static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t button, uint32_t state)
 {
 	(void)d; (void)p; (void)serial; (void)t;
-	if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT)
+	if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT) {
+		pf_serie = serial;
 		ui_click(A.px, A.py);
+	} else if (button == BTN_LEFT) {
+		pf_relache();
+	}
 }
 static void p_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t axis, wl_fixed_t v)
 {
@@ -306,6 +313,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "plume-wifi : pas de connexion Wayland (lancez-le depuis le bureau)\n");
 		return 1;
 	}
+	if (pf_deja_ouvert("plume-wifi"))
+		return 0;
 	A.xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	struct wl_registry *reg = wl_display_get_registry(A.display);
 	wl_registry_add_listener(reg, &reg_listener, NULL);

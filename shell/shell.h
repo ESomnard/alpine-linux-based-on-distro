@@ -27,7 +27,11 @@
 #define DOCK_MARGIN 10
 #define DOCK_SURF_H (DOCK_PANEL_H + DOCK_TIP_H + DOCK_MARGIN)
 #define MAX_WS 16
+#ifdef PLUME_VOID
+#define MAX_APPS 28 /* épinglées + ouvertes (zone du milieu, comme sur Mac) */
+#else
 #define MAX_APPS 16
+#endif
 #define MAX_RUNNING 64
 #define CPU_HIST 24
 
@@ -100,6 +104,9 @@ struct app {
 	bool power;             /* icône ⏻ dessinée en vectoriel */
 	bool separator_before;
 	double hover;           /* 0..1 animé */
+#ifdef PLUME_VOID
+	bool extra;             /* appli ouverte mais pas épinglée (zone du milieu) */
+#endif
 };
 
 struct shell {
@@ -127,6 +134,10 @@ struct shell {
 
 	struct app apps[MAX_APPS];
 	int napps;
+#ifdef PLUME_VOID
+	struct app cfg[MAX_APPS]; /* le dock tel qu'écrit dans dock.conf (épinglées + ⏻) */
+	int ncfg;
+#endif
 
 	/* système */
 	int cpu, ram, bat, vol;
@@ -160,6 +171,39 @@ bool app_is_running(const struct app *a);
 void draw_bar(struct output *o, cairo_t *cr, int w, int h);
 void draw_dock(struct output *o, cairo_t *cr, int w, int h);
 void dock_layout(struct output *o, int w, int h, double *panel_x, double *panel_w);
+
+#ifdef PLUME_VOID
+/* menu.c : menu du clic droit sur une appli du dock (comme sur Mac) */
+#define MENU_MAX 16
+#define MENU_WIN_MAX 8
+#define MENU_EXTRA 380 /* hauteur ajoutée au dock quand le menu est ouvert */
+enum menu_act { M_FOCUS, M_OPEN, M_NEW, M_HIDE, M_SHOW, M_REMOVE, M_KEEP, M_QUIT };
+struct menu_item {
+	char label[160];
+	enum menu_act act;
+	long arg;               /* M_FOCUS : con_id sway */
+	bool check, sep_before;
+	struct rect r;          /* zone cliquable (calculée au dessin) */
+};
+struct menu {
+	bool open;
+	struct output *out;
+	int app, n, nwin, hover;
+	struct menu_item it[MENU_MAX];
+	long hidden[MENU_MAX];  /* fenêtres réduites (scratchpad) */
+	int nhidden;
+};
+extern struct menu M;
+void menu_open(struct output *o, int app);
+void menu_close(void);
+void menu_click(double x, double y);
+void menu_motion(double x, double y);
+void draw_menu(struct output *o, cairo_t *cr, int W, int H);
+/* sys.c : dock = épinglées | ouvertes non épinglées | ⏻ (refait à chaque changement de fenêtres) */
+void dock_compose(void);
+/* main.c : zones cliquables du dock à refaire (le nombre d'applis a changé) */
+void dock_relayout(void);
+#endif
 
 /* main.c */
 void mark_dirty(enum surf_kind kind);

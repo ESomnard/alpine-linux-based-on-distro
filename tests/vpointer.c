@@ -47,7 +47,7 @@ static uint32_t now_ms(void)
 int main(int argc, char **argv)
 {
 	if (argc < 6) {
-		fprintf(stderr, "usage : vpointer W H click X Y [bouton] | drag X1 Y1 X2 Y2 | move X Y\n");
+		fprintf(stderr, "usage : vpointer W H click X Y [bouton [ms]] | dblclick X Y | menu X1 Y1 X2 Y2 [ms] | drag X1 Y1 X2 Y2 [right] | move X Y [ms]\n");
 		return 2;
 	}
 	struct wl_display *dpy = wl_display_connect(NULL);
@@ -71,6 +71,8 @@ int main(int argc, char **argv)
 	const char *cmd = argv[3];
 	if (!strcmp(cmd, "move")) {
 		MOVE(atoi(argv[4]), atoi(argv[5]));
+		if (argc > 6) /* garder la souris là (capture d'un survol) */
+			pause_ms(atoi(argv[6]));
 	} else if (!strcmp(cmd, "click")) {
 		uint32_t b = BTN_LEFT;
 		if (argc > 6 && !strcmp(argv[6], "right")) b = BTN_RIGHT;
@@ -78,13 +80,31 @@ int main(int argc, char **argv)
 		MOVE(atoi(argv[4]), atoi(argv[5]));
 		BTN(b, WL_POINTER_BUTTON_STATE_PRESSED);
 		BTN(b, WL_POINTER_BUTTON_STATE_RELEASED);
+		if (argc > 7) /* garder la souris là après le clic (menus) */
+			pause_ms(atoi(argv[7]));
+	} else if (!strcmp(cmd, "menu") && argc >= 8) {
+		/* clic droit en (X1,Y1), pause, puis clic gauche en (X2,Y2), avec la même souris */
+		MOVE(atoi(argv[4]), atoi(argv[5]));
+		BTN(BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED);
+		BTN(BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED);
+		pause_ms(argc > 8 ? atoi(argv[8]) : 1500);
+		MOVE(atoi(argv[6]), atoi(argv[7]));
+		BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+		BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+	} else if (!strcmp(cmd, "dblclick")) {
+		MOVE(atoi(argv[4]), atoi(argv[5]));
+		for (int i = 0; i < 2; i++) {
+			BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+			BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+		}
 	} else if (!strcmp(cmd, "drag") && argc >= 8) {
 		int x1 = atoi(argv[4]), y1 = atoi(argv[5]), x2 = atoi(argv[6]), y2 = atoi(argv[7]);
+		uint32_t b = argc > 8 && !strcmp(argv[8], "right") ? BTN_RIGHT : BTN_LEFT;
 		MOVE(x1, y1);
-		BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+		BTN(b, WL_POINTER_BUTTON_STATE_PRESSED);
 		for (int i = 1; i <= 8; i++)
 			MOVE(x1 + (x2 - x1) * i / 8, y1 + (y2 - y1) * i / 8);
-		BTN(BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+		BTN(b, WL_POINTER_BUTTON_STATE_RELEASED);
 	}
 	pause_ms(200);
 	zwlr_virtual_pointer_v1_destroy(p);

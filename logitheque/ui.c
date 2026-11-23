@@ -1,6 +1,7 @@
 /* Logithèque Plume — dessin et interactions (style HUD). */
 #include "logitheque.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -828,6 +829,8 @@ static void header(cairo_t *cr, int W)
 {
 	double cy = HEADER_ROW / 2;
 	double x = MARGIN;
+	pf_draw(cr, x, cy, A.px, A.py);
+	x += PF_LARGEUR;
 	x += txt(cr, 20, PANGO_WEIGHT_NORMAL, 0, C_LINE, 1, x, cy, 0, 0, "◆") + 10;
 	x += txt(cr, 15, PANGO_WEIGHT_BOLD, 0.3, C_BRIGHT, 1, x, cy, 0, 0, "LOGITHÈQUE") + 28;
 	int ninst = 0;
@@ -1066,6 +1069,11 @@ static void open_detail(const struct item *it)
 
 void ui_click(double x, double y)
 {
+	switch (pf_clic(x, y)) {
+	case 0: break;
+	case 1: A.running = false; return;
+	default: return;
+	}
 	for (int i = A.nhits - 1; i >= 0; i--) {
 		struct hit *h = &A.hits[i];
 		if (x < h->r.x || x > h->r.x + h->r.w || y < h->r.y || y > h->r.y + h->r.h)
@@ -1101,6 +1109,8 @@ void ui_click(double x, double y)
 		request_redraw();
 		return;
 	}
+	if (y < HEADER_ROW) /* double-clic dans le vide de l'en-tête : plein écran */
+		pf_entete_clic(x, y);
 }
 
 void ui_scroll(double dy)

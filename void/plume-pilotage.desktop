@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Poste de pilotage
+Comment=Terminal HUD avec l'état du système, les fichiers et le clavier
+Exec=plume-term --hud -a plume-pilotage
+Icon=plume-pilotage
+Terminal=false
+Categories=System;Monitor;
+Keywords=hud;système;pilotage;terminal;

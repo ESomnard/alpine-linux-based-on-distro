@@ -1,6 +1,10 @@
 # plume-shell — barre + dock HUD de Plume Linux
 PREFIX  ?= /usr/local
 PKGS     = wayland-client wayland-cursor cairo pangocairo
+# Plume Void : logos des applis dans le dock (SVG)
+ifneq ($(findstring PLUME_VOID,$(CPPFLAGS)),)
+PKGS    += librsvg-2.0
+endif
 CFLAGS  ?= -O2
 CFLAGS  += -std=c11 -Wall -Wextra -Wno-unused-parameter $(shell pkg-config --cflags $(PKGS))
 LDLIBS  += $(shell pkg-config --libs $(PKGS)) -lm
@@ -12,7 +16,7 @@ LAYER_XML      = $(WLR_PROTOCOLS)/unstable/wlr-layer-shell-unstable-v1.xml
 XDG_XML        = $(WL_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
 
 PROTO_H = wlr-layer-shell-unstable-v1-client-protocol.h xdg-shell-client-protocol.h
-OBJ = main.o draw.o ipc.o json.o sys.o wlr-layer-shell-unstable-v1-protocol.o xdg-shell-protocol.o
+OBJ = main.o draw.o ipc.o json.o sys.o menu.o wlr-layer-shell-unstable-v1-protocol.o xdg-shell-protocol.o
 
 all: plume-shell
 

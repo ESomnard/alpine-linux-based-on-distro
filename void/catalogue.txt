@@ -82,7 +82,7 @@ Git | Développement | git | | | Gestion de versions
 Outils de compilation | Développement | base-devel | | | gcc, make et l'essentiel pour compiler
 Python 3 | Développement | python3 | | python3 | Langage de programmation Python
 Node.js | Développement | nodejs | | node | JavaScript côté serveur
-Distrobox | Développement | | | | Ubuntu, Debian, Fedora… dans un conteneur, avec leur gestionnaire de paquets
+Distrobox | Développement | distrobox | | distrobox | Ubuntu, Debian, Fedora… dans un conteneur, avec leur gestionnaire de paquets
 Podman | Développement | podman | | | Conteneurs sans démon, compatible Docker
 Docker | Développement | docker | | | Conteneurs
 

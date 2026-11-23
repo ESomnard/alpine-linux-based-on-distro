@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Plume Linux — icône « plume-vpn » -->
+  <defs>
+    <linearGradient id="f" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#047857"/><stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <linearGradient id="r" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="o" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/><feOffset dy="2.5" result="b"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="url(#f)"/>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="url(#r)"/>
+  <rect x="8.75" y="8.75" width="110.5" height="110.5" rx="26.3" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.5"/>
+  <g filter="url(#o)" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 30l28 10v20c0 18-12 31-28 38-16-7-28-20-28-38V40z" fill="#fff" fill-opacity=".18"/>
+    <rect x="52" y="60" width="24" height="18" rx="3" fill="#fff" stroke="none"/>
+    <path d="M57 60v-5a7 7 0 0 1 14 0v5" stroke-width="5"/>
+  </g>
+</svg>

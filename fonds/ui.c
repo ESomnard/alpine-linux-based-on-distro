@@ -1,6 +1,7 @@
 /* plume-fonds — dessin (aperçu du bureau, miniatures) et clics. */
 #include "fonds.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -407,8 +408,9 @@ void ui_draw(cairo_t *cr, int W, int H)
 	}
 
 	/* en-tête */
-	txt(cr, 20, PANGO_WEIGHT_NORMAL, 0, C_LINE, 1, MARGIN, HEADER_H / 2, 0, 0, "◆");
-	txt(cr, 15, PANGO_WEIGHT_BOLD, 0.3, C_BRIGHT, 1, MARGIN + 30, HEADER_H / 2, 0, 0, "APPARENCE");
+	pf_draw(cr, MARGIN, HEADER_H / 2, A.px, A.py);
+	txt(cr, 20, PANGO_WEIGHT_NORMAL, 0, C_LINE, 1, MARGIN + PF_LARGEUR, HEADER_H / 2, 0, 0, "◆");
+	txt(cr, 15, PANGO_WEIGHT_BOLD, 0.3, C_BRIGHT, 1, MARGIN + PF_LARGEUR + 30, HEADER_H / 2, 0, 0, "APPARENCE");
 	cairo_pattern_t *f = cairo_pattern_create_linear(0, 0, W, 0);
 	cairo_pattern_add_color_stop_rgba(f, 0, ACC_RGB, 0.0);
 	cairo_pattern_add_color_stop_rgba(f, 0.5, ACC_RGB, 0.55);
@@ -436,6 +438,11 @@ void ui_draw(cairo_t *cr, int W, int H)
 
 void ui_click(double x, double y)
 {
+	switch (pf_clic(x, y)) {
+	case 0: break;
+	case 1: A.running = false; return;
+	default: return;
+	}
 	for (int i = A.nhits - 1; i >= 0; i--) {
 		struct hit *h = &A.hits[i];
 		if (x < h->r.x || x > h->r.x + h->r.w || y < h->r.y || y > h->r.y + h->r.h)
@@ -449,6 +456,8 @@ void ui_click(double x, double y)
 		A.dirty = true;
 		return;
 	}
+	if (y < HEADER_H) /* double-clic dans le vide de l'en-tête : plein écran */
+		pf_entete_clic(x, y);
 }
 
 void ui_scroll(double dy)

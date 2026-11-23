@@ -20,6 +20,7 @@
 #include <xkbcommon/xkbcommon-compose.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "fenetre.h"
 
 struct app A;
 
@@ -339,13 +340,19 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t time, wl_fixed_t x,
 	(void)d; (void)p; (void)time;
 	A.px = wl_fixed_to_double(x);
 	A.py = wl_fixed_to_double(y);
+	if (pf_mouvement(A.px, A.py)) /* en-tête tenu et souris bougée : la fenêtre suit */
+		xdg_toplevel_move(A.toplevel, A.seat, pf_serie);
 	A.dirty = true;
 }
 static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
 {
 	(void)d; (void)p; (void)serial; (void)time;
-	if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT)
+	if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT) {
+		pf_serie = serial;
 		ui_click(A.px, A.py);
+	} else if (button == BTN_LEFT) {
+		pf_relache();
+	}
 	A.dirty = true;
 }
 static void p_axis(void *d, struct wl_pointer *p, uint32_t time, uint32_t axis, wl_fixed_t v)
@@ -429,6 +436,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "plume-logitheque : pas de connexion Wayland (lancez-la depuis le bureau)\n");
 		return 1;
 	}
+	if (pf_deja_ouvert("plume-logitheque"))
+		return 0;
 	A.xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	const char *loc = getenv("LC_ALL");
 	if (!loc || !*loc) loc = getenv("LANG");

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Plume — appelé par modprobe à la place de « modprobe nouveau » (/etc/modprobe.d/plume-nouveau.conf).
+# PC portable à deux cartes graphiques (Intel ou AMD + NVIDIA, ex. Asus R702U) : le pilote libre
+# NVIDIA « nouveau » y bloque souvent l'affichage (écran noir après le menu de démarrage).
+# On ne le charge donc pas : l'écran passe par la puce Intel/AMD. Un PC avec seulement une
+# carte NVIDIA garde « nouveau ». Pilote NVIDIA officiel : sudo plume-pilotes --installer.
+PATH=/usr/bin:/usr/sbin:/bin:/sbin:$PATH
+for d in /sys/bus/pci/devices/*; do
+	read -r classe < "$d/class" 2>/dev/null || continue
+	read -r vendeur < "$d/vendor" 2>/dev/null || continue
+	case "$classe" in 0x03*) case "$vendeur" in 0x8086|0x1002) exit 0 ;; esac ;; esac
+done
+exec modprobe --ignore-install nouveau "$@"

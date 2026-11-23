@@ -25,7 +25,7 @@ secret() { # secret "question" -> lu sans écho
 }
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
-CLAVIER="fr" FUSEAU="Europe/Paris" MACHINE="plume" DISQUE="" UTILISATEUR=""
+CLAVIER="fr" FUSEAU="Europe/Paris" MACHINE="plume" DISQUE="" UTILISATEUR="" NOM_COMPLET=""
 MOT_DE_PASSE="" MOT_DE_PASSE_ROOT="" WIFI_NOM="" WIFI_MOT_DE_PASSE=""
 APPLIS="oui" REDEMARRER="oui" CHIFFREMENT="non" PHRASE_CHIFFREMENT=""
 NOYAU_EXTRA=""   # options du noyau en plus (ex. « nomodeset », « console=ttyS0 »)
@@ -48,7 +48,8 @@ else
 	CLAVIER="$(ask 'Disposition clavier (fr, us, ch…)' fr)"
 	FUSEAU="$(ask 'Fuseau horaire' 'Europe/Paris')"
 	MACHINE="$(ask 'Nom de la machine' plume)"
-	UTILISATEUR="$(ask 'Ton identifiant (minuscules, sans espace)' moi)"
+	NOM_COMPLET="$(ask 'Ton nom (affiché, accents et espaces permis)' '')"
+	UTILISATEUR="$(ask 'Ton identifiant pour te connecter (lettres, majuscules permises, sans espace)' moi)"
 	while :; do
 		MOT_DE_PASSE="$(secret 'Ton mot de passe (aussi celui de sudo)')"
 		[ -n "$MOT_DE_PASSE" ] && [ "$MOT_DE_PASSE" = "$(secret 'Encore une fois')" ] && break
@@ -76,7 +77,8 @@ if [ "$CHIFFREMENT" = oui ] && [ ${#PHRASE_CHIFFREMENT} -lt 8 ]; then
 	echo "CHIFFREMENT=oui : PHRASE_CHIFFREMENT doit faire au moins 8 caractères" >&2
 	exit 1
 fi
-echo "$UTILISATEUR" | grep -Eq '^[a-z_][a-z0-9_-]*$' || { echo "Identifiant invalide : $UTILISATEUR" >&2; exit 1; }
+echo "$UTILISATEUR" | grep -Eq '^[A-Za-z_][A-Za-z0-9._-]{0,31}$' || { echo "Identifiant invalide : $UTILISATEUR (lettres, chiffres, . - ou _, sans espace, 32 caractères max.)" >&2; exit 1; }
+NOM_COMPLET=$(printf '%s' "$NOM_COMPLET" | tr -d ':,\n')   # interdits dans /etc/passwd
 
 # /dev/sda -> /dev/sda1 ; /dev/nvme0n1 -> /dev/nvme0n1p1
 part() { case "$DISQUE" in *[0-9]) echo "${DISQUE}p$1" ;; *) echo "$DISQUE$1" ;; esac; }
@@ -179,7 +181,8 @@ grep -q '^KEYMAP=' "$MNT/etc/rc.conf" || echo "KEYMAP=$CLAVIER" >> "$MNT/etc/rc.
 sed -i "s|^#*TIMEZONE=.*|TIMEZONE=$FUSEAU|" "$MNT/etc/rc.conf"
 
 # utilisateur (mots de passe : seulement dans /etc/shadow du système installé)
-IN useradd -m -s /bin/bash -G wheel,audio,video,input,_seatd,network,bluetooth,storage,lpadmin,scanner "$UTILISATEUR"
+# --badnames : majuscules et points permis (comme Debian), refusés par défaut par useradd de Void
+IN useradd --badnames -m -s /bin/bash -c "$NOM_COMPLET" -G wheel,audio,video,input,_seatd,network,bluetooth,storage,lpadmin,scanner "$UTILISATEUR"
 printf '%s:%s\n' "$UTILISATEUR" "$MOT_DE_PASSE" | IN chpasswd -c SHA512
 if [ -n "$MOT_DE_PASSE_ROOT" ]; then
 	printf 'root:%s\n' "$MOT_DE_PASSE_ROOT" | IN chpasswd -c SHA512

@@ -85,7 +85,7 @@ if not PHASE2:
     step("Live OK")
     vm.check("utilisateur live plume (groupes du bureau)", "id plume", r"_seatd")
     vm.check("paquets Plume dans le live", "xbps-query plume-bureau", r"pkgver: plume-bureau")
-    conf = (f'DISQUE=/dev/vda\nUTILISATEUR=test\nMOT_DE_PASSE={PW}\nREDEMARRER=non\nNOYAU_EXTRA="console=ttyS0,115200"\n')
+    conf = (f'DISQUE=/dev/vda\nUTILISATEUR=Test.Plume\nNOM_COMPLET="Élève Test"\nMOT_DE_PASSE={PW}\nREDEMARRER=non\nNOYAU_EXTRA="console=ttyS0,115200"\n')
     if CHIFFRE:
         conf += f"CHIFFREMENT=oui\nPHRASE_CHIFFREMENT={PHRASE}\n"
     vm.run(f"printf '{conf}' > /tmp/auto.conf")
@@ -114,7 +114,7 @@ if CHIFFRE:
     vm.expect(r"[Pp]assword|[Pp]assphrase", 900, "demande de la phrase secrète")
     vm.p.send(f"{PHRASE}\r")
     step("Phrase secrète acceptée")
-vm.login("test", PW)
+vm.login("Test.Plume", PW)
 step("Connexion de l'utilisateur OK")
 ok = True
 ok &= vm.check("glibc", "ldd --version | head -1", r"GNU libc|GLIBC")
@@ -182,6 +182,13 @@ dbus-run-session sh -c '
   plume-accessibilite loupe 2 >/dev/null; [ "$(swaymsg -t get_outputs -r | jq ".[0].scale == 2")" = true ] && echo loupe-ok
   plume-accessibilite loupe 1 >/dev/null
   plume-ecrans --hdr on | grep -q Vulkan && [ -f ~/.config/plume/rendu-vulkan ] && plume-ecrans --hdr off >/dev/null && [ ! -f ~/.config/plume/rendu-vulkan ] && echo hdr-ok
+  sway -C -c /tmp/sway-test.conf >/tmp/sway-check.log 2>&1 && echo config-sway-ok
+  plume-raccourcis & sleep 15
+  swaymsg -t get_tree -r | jq -e "[.. | objects | select(.name? == \\"Raccourcis Plume\\" and .type == \\"floating_con\\")] | length > 0" >/dev/null && echo panneau-ouvert-ok
+  plume-raccourcis; sleep 3
+  swaymsg -t get_tree -r | jq -e "[.. | objects | select(.name? == \\"Raccourcis Plume\\")] | length == 0" >/dev/null && echo panneau-ferme-ok
+  plume-raccourcis --faire b2; sleep 1
+  [ "$(swaymsg -t get_workspaces -r | jq -r ".[] | select(.focused) | .name")" = 2 ] && echo bouton-raccourci-ok
   swaymsg exit
 '
 """
@@ -193,7 +200,20 @@ step("OK : portail fichiers (gtk)" if "portail-fichiers-ok" in out else "ECHEC :
 step("OK : plume-ecrans enregistre et sway relit les réglages" if "ecrans-ok" in out else "ECHEC : plume-ecrans")
 step("OK : loupe (zoom ×2 puis ×1)" if "loupe-ok" in out else "ECHEC : loupe")
 step("OK : HDR (passage au rendu Vulkan, puis retour)" if "hdr-ok" in out else "ECHEC : HDR")
-ok &= all(m in out for m in ("portail-ecran-ok", "portail-fichiers-ok", "ecrans-ok", "loupe-ok", "hdr-ok"))
+step("OK : configuration sway valide (raccourcis Alt+F4, Super+Ctrl+flèches, Super+F1)" if "config-sway-ok" in out else "ECHEC : configuration sway")
+step("OK : panneau Raccourcis ouvert (fenêtre libre)" if "panneau-ouvert-ok" in out else "ECHEC : panneau Raccourcis ouvert")
+step("OK : panneau Raccourcis refermé (même raccourci)" if "panneau-ferme-ok" in out else "ECHEC : panneau Raccourcis refermé")
+step("OK : bouton du panneau (aller au bureau 2)" if "bouton-raccourci-ok" in out else "ECHEC : bouton du panneau Raccourcis")
+ok &= all(m in out for m in ("portail-ecran-ok", "portail-fichiers-ok", "ecrans-ok", "loupe-ok", "hdr-ok",
+                             "config-sway-ok", "panneau-ouvert-ok", "panneau-ferme-ok", "bouton-raccourci-ok"))
+if "config-sway-ok" not in out:
+    vm.run("tail -8 /tmp/sway-check.log")
+ok &= vm.check("logos Plume et icônes du bureau installés",
+               "ls /usr/share/icons/hicolor/scalable/apps/plume-wifi.svg && command -v plume-icones-bureau && "
+               "grep -q '^Icon=plume-wifi$' /usr/share/applications/plume-wifi.desktop && echo logos-ok", r"logos-ok")
+ok &= vm.check("dock : plus de bouton fermer ni raccourcis ; plume-linux help montre les raccourcis",
+               "! grep -q 'swaymsg kill\\|plume-raccourcis' /etc/plume/dock.conf && "
+               "plume-linux help | grep -q 'Alt+F4' && plume-linux help | grep -q 'Aller au bureau 1 à 10' && echo dock-ok", r"dock-ok")
 if "portail-ecran-ok" not in out:
     vm.run("tail -5 /tmp/pipewire.log; ls /usr/share/xdg-desktop-portal/portals/ /etc/xdg/xdg-desktop-portal/")
 # imprimantes, scanners, énergie, firmwares, VPN, wifi public
@@ -260,7 +280,7 @@ if m:
     if CHIFFRE:
         vm.expect(r"[Pp]assword|[Pp]assphrase", 900, "demande de la phrase secrète")
         vm.p.send(f"{PHRASE}\r")
-    vm.login("test", PW)
+    vm.login("Test.Plume", PW)
     ok &= vm.check("après retour : logiciel retiré revenu, fichier système ajouté disparu",
                    "command -v micro && [ ! -e /etc/plume-marqueur ] && echo systeme-revenu", r"systeme-revenu")
     ok &= vm.check("après retour : fichiers personnels intacts (/home)", "cat ~/doc.txt ~/apres.txt", r"doc\s+apres")

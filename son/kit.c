@@ -1,6 +1,7 @@
 /* Panneau Plume — dessin HUD commun (repris de plume-wifi). */
 #include "panel.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -155,9 +156,9 @@ void header(cairo_t *cr, double W, const char *title, const char *sub)
 	cairo_move_to(cr, 0, HEADER_H - 0.5);
 	cairo_line_to(cr, W, HEADER_H - 0.5);
 	glow_stroke(cr, C_LINE, 1, 0.6);
-	double w = txt(cr, 20, 800, 0.2, C_BRIGHT, 1, MARGIN, HEADER_H / 2, 0, 0, title);
+	double w = txt(cr, 20, 800, 0.2, C_BRIGHT, 1, MARGIN + PF_LARGEUR, HEADER_H / 2, 0, 0, title);
 	if (sub && *sub)
-		txt(cr, 11, 400, 0.1, C_MUTED, 1, MARGIN + w + 14, HEADER_H / 2 + 2, 0, 0, sub);
+		txt(cr, 11, 400, 0.1, C_MUTED, 1, MARGIN + PF_LARGEUR + w + 14, HEADER_H / 2 + 2, 0, 0, sub);
 }
 
 void statusbar(cairo_t *cr, double W, double H, const char *hint)

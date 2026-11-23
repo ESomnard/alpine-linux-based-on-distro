@@ -144,10 +144,28 @@ static void set_dock_input_region(struct surf *s)
 	dock_layout(s->out, s->width, s->height, NULL, NULL);
 	struct rect p = s->out->dock_panel;
 	struct wl_region *r = wl_compositor_create_region(S.compositor);
+#ifdef PLUME_VOID
+	if (M.open && M.out == s->out) /* menu ouvert : tout le dock agrandi reçoit les clics */
+		wl_region_add(r, 0, 0, s->width, s->height);
+	else
+#endif
 	wl_region_add(r, (int)p.x, (int)p.y - 12, (int)p.w, (int)p.h + 12);
 	wl_surface_set_input_region(s->surface, r);
 	wl_region_destroy(r);
 }
+
+#ifdef PLUME_VOID
+void dock_relayout(void)
+{
+	struct output *o;
+	wl_list_for_each(o, &S.outputs, link)
+		if (o->dock.configured)
+			set_dock_input_region(&o->dock);
+	if (S.hover_app >= S.napps)
+		S.hover_app = -1;
+	mark_dirty(SURF_DOCK);
+}
+#endif
 
 static void layer_configure(void *data, struct zwlr_layer_surface_v1 *l, uint32_t serial, uint32_t w, uint32_t h)
 {
@@ -308,6 +326,10 @@ static void p_enter(void *d, struct wl_pointer *p, uint32_t serial, struct wl_su
 static void p_leave(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf)
 {
 	(void)d; (void)p; (void)s; (void)sf;
+#ifdef PLUME_VOID
+	if (M.open && S.ptr_surf && S.ptr_surf == &M.out->dock)
+		menu_close(); /* la souris quitte le dock : le menu se referme */
+#endif
 	S.ptr_surf = NULL;
 	update_hover();
 }
@@ -317,6 +339,13 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl
 	(void)d; (void)p; (void)t;
 	S.px = wl_fixed_to_double(x);
 	S.py = wl_fixed_to_double(y);
+#ifdef PLUME_VOID
+	if (M.open) {
+		if (S.ptr_surf && S.ptr_surf == &M.out->dock)
+			menu_motion(S.px, S.py);
+		return;
+	}
+#endif
 	update_hover();
 }
 
@@ -364,6 +393,12 @@ static void click_dock(struct output *o, uint32_t button)
 		struct app *a = &S.apps[i];
 		if (!in_rect(o->hit_app[i], S.px, S.py))
 			continue;
+#ifdef PLUME_VOID
+		if (button == BTN_RIGHT && !a->power && a->app_id[0]) { /* clic droit : menu comme sur Mac */
+			menu_open(o, i);
+			return;
+		}
+#endif
 		if (!a->power && button == BTN_LEFT && app_is_running(a)) {
 			/* déjà ouvert : on l'affiche */
 			ipc_command("[app_id=\"^%s$\"] focus", a->app_id);
@@ -380,6 +415,15 @@ static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t,
 	(void)d; (void)p; (void)serial; (void)t;
 	if (state != WL_POINTER_BUTTON_STATE_PRESSED || !S.ptr_surf)
 		return;
+#ifdef PLUME_VOID
+	if (M.open) { /* menu ouvert : le clic est pour lui (ou le referme) */
+		if (S.ptr_surf == &M.out->dock)
+			menu_click(S.px, S.py);
+		else
+			menu_close();
+		return;
+	}
+#endif
 	if (S.ptr_surf->kind == SURF_BAR)
 		click_bar(S.ptr_surf->out, button);
 	else
@@ -418,6 +462,15 @@ static void seat_caps(void *d, struct wl_seat *s, uint32_t caps)
 		S.pointer = wl_seat_get_pointer(s);
 		wl_pointer_add_listener(S.pointer, &pointer_listener, NULL);
 	}
+#ifdef PLUME_VOID
+	/* plus aucune souris (débranchée, Bluetooth déconnecté) : on lâche l'ancienne, sinon la
+	 * barre et le dock restent sourds quand une souris revient */
+	else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && S.pointer) {
+		wl_pointer_release(S.pointer);
+		S.pointer = NULL;
+		S.ptr_surf = NULL;
+	}
+#endif
 }
 static void seat_name(void *d, struct wl_seat *s, const char *n) { (void)d; (void)s; (void)n; }
 static const struct wl_seat_listener seat_listener = { .capabilities = seat_caps, .name = seat_name };

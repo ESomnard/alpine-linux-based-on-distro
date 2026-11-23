@@ -12,7 +12,7 @@ ARCH=x86_64
 echo "==> Outils de compilation"
 xbps-install -Syu xbps >/dev/null 2>&1 || true
 xbps-install -Sy gcc make pkg-config wayland-devel wayland-protocols cairo-devel pango-devel \
-	libxkbcommon-devel pam-devel libvterm-devel librsvg-devel gdk-pixbuf-devel dejavu-fonts-ttf \
+	libxkbcommon-devel gtk+3-devel pam-devel libvterm-devel librsvg-devel gdk-pixbuf-devel dejavu-fonts-ttf \
 	openssl curl unzip >/dev/null
 
 # clé de signature Void (créée une seule fois, gardée dans cles/, jamais publiée)
@@ -33,14 +33,22 @@ paquet() {
 	nom=$1 dir=$2 desc=$3 dep=$4 arch=${5:-$ARCH}
 	rm -rf "$D" /tmp/b && cp -r "$W/$dir" /tmp/b
 	make -s -C /tmp/b clean >/dev/null 2>&1 || true
-	make -s -C /tmp/b WLR_PROTOCOLS="$WLR" >/dev/null || { echo "ÉCHEC compilation : $nom" >&2; exit 1; }
-	make -s -C /tmp/b install DESTDIR="$D" PREFIX=/usr WLR_PROTOCOLS="$WLR" >/dev/null
+	# PLUME_PASTILLES : pastilles fermer / réduire / plein écran dans les fenêtres (fenetre.h) ;
+	# PLUME_VOID : corrections propres à Plume Void (ex. flèche de la souris dans le lanceur)
+	make -s -C /tmp/b WLR_PROTOCOLS="$WLR" CPPFLAGS="-DPLUME_PASTILLES -DPLUME_VOID" >/dev/null || { echo "ÉCHEC compilation : $nom" >&2; exit 1; }
+	make -s -C /tmp/b install DESTDIR="$D" PREFIX=/usr WLR_PROTOCOLS="$WLR" CPPFLAGS="-DPLUME_PASTILLES -DPLUME_VOID" >/dev/null
 	[ -z "${EXTRA:-}" ] || eval "$EXTRA"
 	EXTRA=""
 	finir "$nom" "$desc" "$dep" "$arch"
 }
 finir() {
 	nom=$1 desc=$2 dep=$3 arch=$4
+	# logos Plume (void/icones, paquet plume-icones) à la place des icônes génériques
+	for f in "$D"/usr/share/applications/plume-*.desktop; do
+		[ -f "$f" ] || continue
+		n=$(basename "$f" .desktop)
+		[ -f "$W/void/icones/$n.svg" ] && sed -i "s/^Icon=.*/Icon=$n/" "$f"
+	done
 	(cd "$OUT" && xbps-create -q -A "$arch" -n "$nom-${VERSION}_$REL" -s "$desc" \
 		-l GPL-3.0-or-later -H "https://github.com/ESomnard/alpine-linux-based-on-distro" \
 		-m "Plume <plume@localhost>" ${dep:+-D "$dep"} "$D") || { echo "ÉCHEC paquet : $nom" >&2; exit 1; }
@@ -59,7 +67,8 @@ printf '# PAM de l écran de verrouillage plume-hud (comme swaylock)\nauth inclu
 mkdir -p "$D/usr/share/plume" && "$D/usr/bin/plume-wall" "$D/usr/share/plume/wallpaper.png" 2560 1440
 finir plume-hud "Écran de connexion et de verrouillage HUD" "$RT pam>=0 greetd>=0 cage>=0" $ARCH
 
-paquet plume-shell shell "Barre et dock HUD (sway)" "$RT"
+paquet plume-shell shell "Barre et dock HUD (sway)" "$RT librsvg>=0"
+paquet plume-icones-bureau void/bureau "Fichiers du Bureau sur le bureau (ouvrir, renommer, corbeille…)" "$RT librsvg>=0 gdk-pixbuf>=0 xdg-utils>=0 wl-clipboard>=0"
 paquet plume-term term "Terminal HUD et poste de pilotage" "$RT libvterm>=0"
 paquet plume-lanceur lanceur "Toutes les applications, en grille" "$RT librsvg>=0"
 paquet plume-fonds fonds "Apparence : fond d'écran et couleur du thème" "$RT gdk-pixbuf>=0 dejavu-fonts-ttf>=0"
@@ -69,15 +78,17 @@ paquet plume-bluetooth bluetooth "Panneau Bluetooth HUD (bluez)" "$RT bluez>=0"
 # catalogue de la Logithèque : noms des paquets Void
 EXTRA='install -Dm644 "$W/void/catalogue.txt" "$D/usr/share/plume/logitheque.txt"'
 paquet plume-logitheque logitheque "Logithèque : installer des applications" "$RT sudo>=0"
+# pastilles rouge / jaune / verte dans le gestionnaire de fichiers (module GTK 3)
+paquet plume-pastilles-gtk void/pastilles-gtk "Pastilles de fenêtre Plume dans PCManFM (module GTK 3)" "gtk+3>=0"
 
 # scripts Plume : communs, remplacés par leur version Void quand elle existe
 rm -rf "$D" && mkdir -p "$D/usr/bin"
-for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
+for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-linux plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
 	src=$W/rootfs/etc/plume/conf/$f
 	[ -f "$W/void/rootfs/etc/plume/conf/$f" ] && src=$W/void/rootfs/etc/plume/conf/$f
 	install -m755 "$src" "$D/usr/bin/$f"
 done
-for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour plume-raccourcis; do
+for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour plume-raccourcis plume-term plume-pilotage; do
 	install -Dm644 "$W/void/$d.desktop" "$D/usr/share/applications/$d.desktop"
 done
 finir plume-outils "Scripts Plume : mises à jour, pare-feu, thème, écrans, jeux, manettes, émulation, lanceurs" "nftables>=0 sudo>=0 jq>=0" noarch
@@ -92,9 +103,14 @@ cp /tmp/jb/fonts/ttf/*.ttf "$D/usr/share/fonts/TTF/"
 	-l OFL-1.1 -H https://www.jetbrains.com/lp/mono/ -m "Plume <plume@localhost>" "$D")
 echo "    font-jetbrains-mono-${JB}_1"
 
+# logos des applis Plume (void/icones) : grille des applis, dock, menus
+rm -rf "$D" && mkdir -p "$D/usr/share/icons/hicolor/scalable/apps"
+install -m644 "$W"/void/icones/plume-*.svg "$D/usr/share/icons/hicolor/scalable/apps/"
+finir plume-icones "Logos des applications Plume" "" noarch
+
 rm -rf "$D" && mkdir -p "$D"
 finir plume-bureau "Bureau Plume complet (composants HUD)" \
-	"plume-hud>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
+	"plume-hud>=0 plume-icones>=0 plume-icones-bureau>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-pastilles-gtk>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
 
 echo "==> Index et signature"
 cd "$OUT"

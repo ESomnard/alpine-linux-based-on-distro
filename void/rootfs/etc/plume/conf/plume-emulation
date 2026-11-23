@@ -58,6 +58,7 @@ if [ "${1:-}" = --tout ]; then
 	xbps-install -y flatpak
 	[ -n "$U" ] || { echo "Lance avec sudo depuis ton compte pour installer les applis Flathub." >&2; exit 1; }
 	su "$U" -c "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+		{ flatpak update --user --appstream -y --noninteractive >/dev/null 2>&1 || true; } &&
 		flatpak install --user -y --noninteractive flathub $(echo $FLATHUB)"
 fi
 echo; echo "Terminé. Les émulateurs sont dans la grille des applications (Super + a)."

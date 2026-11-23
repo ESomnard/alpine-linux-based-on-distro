@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#ifdef PLUME_VOID
+#include <librsvg/rsvg.h>
+#endif
 
 #define C_BG      0x02060b
 #define C_TEXT    0xcdeefc
@@ -344,6 +347,40 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 
 /* =============================== DOCK ================================ */
 
+#ifdef PLUME_VOID
+/* logo d'une appli Plume (paquet plume-icones), rendu une fois en 160 px puis gardé */
+#define ICON_PX 160
+static cairo_surface_t *plume_icon(const char *app_id)
+{
+	static struct { char id[64]; cairo_surface_t *s; bool tried; } cache[MAX_APPS * 2];
+	static int n;
+	if (!app_id[0])
+		return NULL;
+	for (int i = 0; i < n; i++)
+		if (!strcmp(cache[i].id, app_id))
+			return cache[i].s;
+	if (n >= (int)(sizeof cache / sizeof cache[0]))
+		return NULL;
+	snprintf(cache[n].id, sizeof cache[0].id, "%s", app_id);
+	cache[n].s = NULL;
+	char path[256];
+	snprintf(path, sizeof path, "/usr/share/icons/hicolor/scalable/apps/%s.svg", app_id);
+	RsvgHandle *h = rsvg_handle_new_from_file(path, NULL);
+	if (h) {
+		cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, ICON_PX, ICON_PX);
+		cairo_t *c = cairo_create(s);
+		RsvgRectangle vp = { 0, 0, ICON_PX, ICON_PX };
+		if (rsvg_handle_render_document(h, c, &vp, NULL))
+			cache[n].s = s;
+		else
+			cairo_surface_destroy(s);
+		cairo_destroy(c);
+		g_object_unref(h);
+	}
+	return cache[n++].s;
+}
+#endif
+
 void dock_layout(struct output *o, int W, int H, double *panel_x, double *panel_w)
 {
 	int seps = 0;
@@ -401,6 +438,24 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 		double tx = t.x + (DOCK_TILE - tw) / 2, ty = t.y + DOCK_TILE - tw - lift;
 		bool run = app_is_running(a);
 
+#ifdef PLUME_VOID
+		cairo_surface_t *ic = a->power ? NULL : plume_icon(a->app_id);
+		if (ic) {
+			/* le logo (carré arrondi de 112 sur 128) remplit la case ; halo au survol */
+			double full = tw * 128.0 / 112.0, off = tw * 8.0 / 112.0;
+			if (hv > 0.05) {
+				rrect(cr, tx, ty, tw, tw, 12 * sc);
+				glow_stroke(cr, C_LINE, 1.2, hv);
+			}
+			cairo_save(cr);
+			cairo_translate(cr, tx - off, ty - off);
+			cairo_scale(cr, full / ICON_PX, full / ICON_PX);
+			cairo_set_source_surface(cr, ic, 0, 0);
+			cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+			cairo_paint(cr);
+			cairo_restore(cr);
+		} else {
+#endif
 		rrect(cr, tx, ty, tw, tw, 12 * sc);
 		cairo_set_source_rgba(cr, ACC_RGB, 0.05 + 0.10 * hv + (run ? 0.04 : 0));
 		cairo_fill_preserve(cr);
@@ -419,6 +474,9 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 			txt(cr, FONT_SYM, (ascii ? 17 : 22) * sc, ascii ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,
 			    0, gc, 1, tx + tw / 2, ty + tw / 2, 1, 0, a->glyph);
 		}
+#ifdef PLUME_VOID
+		}
+#endif
 		/* point « ouvert » */
 		if (run) {
 			bool foc = S.focused_app[0] && !strcasecmp(S.focused_app, a->app_id);
@@ -432,6 +490,12 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 		}
 	}
 
+#ifdef PLUME_VOID
+	if (M.open && M.out == o) {
+		draw_menu(o, cr, W, H);
+		return; /* pas d'info-bulle sous le menu */
+	}
+#endif
 	/* info-bulle */
 	if (S.hover_app >= 0 && S.hover_app < S.napps && S.apps[S.hover_app].hover > 0.2) {
 		struct app *a = &S.apps[S.hover_app];
@@ -458,3 +522,67 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 		cairo_paint_with_alpha(cr, al);
 	}
 }
+
+#ifdef PLUME_VOID
+/* ======================= MENU DU CLIC DROIT (Mac) ======================= */
+
+void draw_menu(struct output *o, cairo_t *cr, int W, int H)
+{
+	(void)H;
+	if (M.app < 0 || M.app >= S.napps)
+		return;
+	const double fs = 12.5, ih = 30, sh = 9, pad = 6;
+	double w = 210, h = 2 * pad;
+	for (int i = 0; i < M.n; i++) {
+		double tw = txt_w(cr, FONT_SYM, fs, PANGO_WEIGHT_NORMAL, 0, M.it[i].label) + 58;
+		if (tw > w)
+			w = tw;
+		h += ih + (M.it[i].sep_before ? sh : 0);
+	}
+	if (w > 380)
+		w = 380;
+	struct rect t = o->hit_app[M.app];
+	double x = t.x + DOCK_TILE / 2.0 - w / 2, y = o->dock_panel.y - 14 - h;
+	if (x < 8) x = 8;
+	if (x + w > W - 8) x = W - 8 - w;
+	if (y < 4) y = 4;
+
+	/* fond et contour (style HUD de Plume) */
+	rrect(cr, x, y, w, h, 10);
+	cairo_set_source_rgba(cr, 3 / 255.0, 8 / 255.0, 14 / 255.0, 0.97);
+	cairo_fill_preserve(cr);
+	glow_stroke(cr, C_LINE, 1.2, 0.8);
+	/* petite pointe vers l'icône */
+	double cx = t.x + DOCK_TILE / 2.0;
+	cairo_move_to(cr, cx - 7, y + h);
+	cairo_line_to(cr, cx, y + h + 7);
+	cairo_line_to(cr, cx + 7, y + h);
+	cairo_close_path(cr);
+	rgba(cr, C_LINE, 1);
+	cairo_fill(cr);
+
+	double yy = y + pad;
+	for (int i = 0; i < M.n; i++) {
+		struct menu_item *it = &M.it[i];
+		if (it->sep_before) {
+			rgba(cr, C_LINEDIM, 1);
+			cairo_rectangle(cr, x + 12, yy + sh / 2, w - 24, 1);
+			cairo_fill(cr);
+			yy += sh;
+		}
+		it->r = (struct rect){ x + 4, yy, w - 8, ih };
+		bool hv = i == M.hover;
+		if (hv) {
+			rrect(cr, it->r.x, it->r.y + 1, it->r.w, it->r.h - 2, 6);
+			cairo_set_source_rgba(cr, ACC_RGB, 0.22);
+			cairo_fill(cr);
+		}
+		if (it->check)
+			txt(cr, FONT_SYM, fs, PANGO_WEIGHT_BOLD, 0, C_OK, 1, x + 14, yy + ih / 2, 0, 0, "✓");
+		uint32_t col = hv ? C_BRIGHT : it->act == M_FOCUS ? C_TEXT : C_TEXT;
+		txt(cr, FONT_SYM, fs, it->act == M_FOCUS ? PANGO_WEIGHT_NORMAL : PANGO_WEIGHT_SEMIBOLD, 0, col, 1,
+		    x + 34, yy + ih / 2, 0, w - 46, it->label);
+		yy += ih;
+	}
+}
+#endif

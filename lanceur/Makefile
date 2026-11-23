@@ -1,6 +1,6 @@
 # plume-lanceur — toutes les applications en grille (à la GNOME), style HUD
 PREFIX  ?= /usr/local
-PKGS     = wayland-client xkbcommon cairo pangocairo librsvg-2.0
+PKGS     = wayland-client wayland-cursor xkbcommon cairo pangocairo librsvg-2.0
 CFLAGS  ?= -O2
 CFLAGS  += -std=c11 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation $(shell pkg-config --cflags $(PKGS))
 LDLIBS  += $(shell pkg-config --libs $(PKGS)) -lm

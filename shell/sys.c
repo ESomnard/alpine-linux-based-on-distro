@@ -292,10 +292,172 @@ void apps_load(void)
 		buf[n] = '\0';
 		parse_dock(buf);
 		if (S.napps > 0)
-			return;
+			break;
 	}
-	parse_dock(DEFAULT_DOCK);
+	if (S.napps == 0)
+		parse_dock(DEFAULT_DOCK);
+#ifdef PLUME_VOID
+	memcpy(S.cfg, S.apps, sizeof S.cfg);
+	S.ncfg = S.napps;
+	dock_compose();
+#endif
 }
+
+#ifdef PLUME_VOID
+#pragma GCC diagnostic ignored "-Wformat-truncation" /* noms et chemins coupés : voulu */
+/* ------------- zone du milieu du dock : applis ouvertes non épinglées ------------- */
+
+/* nom et commande d'une appli d'après son fichier .desktop (même nom que l'app_id,
+ * ou StartupWMClass=app_id) ; gardés en mémoire */
+static struct { char id[64], name[48], cmd[256]; } cache[48];
+static int ncache;
+
+static bool desktop_read(const char *path, const char *id, bool by_class, char *name, char *cmd)
+{
+	FILE *f = fopen(path, "r");
+	if (!f)
+		return false;
+	char l[1024], nm[48] = "", ex[256] = "";
+	bool cls = !by_class, in_entry = false;
+	while (fgets(l, sizeof l, f)) {
+		l[strcspn(l, "\r\n")] = '\0';
+		if (l[0] == '[') {
+			in_entry = !strcmp(l, "[Desktop Entry]");
+			continue;
+		}
+		if (!in_entry)
+			continue;
+		if (!strncmp(l, "Name=", 5) && !nm[0])
+			snprintf(nm, sizeof nm, "%s", l + 5);
+		else if (!strncmp(l, "Exec=", 5) && !ex[0])
+			snprintf(ex, sizeof ex, "%s", l + 5);
+		else if (!strncmp(l, "StartupWMClass=", 15) && !strcasecmp(l + 15, id))
+			cls = true;
+	}
+	fclose(f);
+	if (!cls || !nm[0])
+		return false;
+	/* Exec sans les codes %U, %f… */
+	for (char *p = strchr(ex, '%'); p; p = strchr(p, '%')) {
+		if (p[1]) memmove(p, p + 2, strlen(p + 2) + 1);
+		else *p = '\0';
+	}
+	size_t k = strlen(ex);
+	while (k && ex[k - 1] == ' ')
+		ex[--k] = '\0';
+	snprintf(name, 48, "%s", nm);
+	snprintf(cmd, 256, "%s", ex);
+	return true;
+}
+
+static void desktop_lookup(const char *id, char *name, char *cmd)
+{
+	for (int i = 0; i < ncache; i++)
+		if (!strcmp(cache[i].id, id)) {
+			snprintf(name, 48, "%s", cache[i].name);
+			snprintf(cmd, 256, "%s", cache[i].cmd);
+			return;
+		}
+	const char *home = getenv("HOME");
+	char dirs[4][512];
+	snprintf(dirs[0], sizeof dirs[0], "%s/.local/share/applications", home ? home : "/nonexistent");
+	snprintf(dirs[1], sizeof dirs[1], "/usr/share/applications");
+	snprintf(dirs[2], sizeof dirs[2], "%s/.local/share/flatpak/exports/share/applications", home ? home : "/nonexistent");
+	snprintf(dirs[3], sizeof dirs[3], "/var/lib/flatpak/exports/share/applications");
+	bool found = false;
+	/* 1) fichier au nom de l'appli ; 2) StartupWMClass */
+	for (int d = 0; d < 4 && !found; d++) {
+		char p[700];
+		snprintf(p, sizeof p, "%s/%s.desktop", dirs[d], id);
+		found = desktop_read(p, id, false, name, cmd);
+	}
+	for (int d = 0; d < 4 && !found; d++) {
+		DIR *dir = opendir(dirs[d]);
+		struct dirent *e;
+		while (dir && !found && (e = readdir(dir))) {
+			size_t n = strlen(e->d_name);
+			if (n < 9 || strcmp(e->d_name + n - 8, ".desktop"))
+				continue;
+			char p[800];
+			snprintf(p, sizeof p, "%s/%s", dirs[d], e->d_name);
+			found = desktop_read(p, id, true, name, cmd);
+		}
+		if (dir)
+			closedir(dir);
+	}
+	if (!found) {
+		snprintf(name, 48, "%s", id);
+		cmd[0] = '\0';
+	}
+	if (ncache < 48) {
+		snprintf(cache[ncache].id, sizeof cache[0].id, "%s", id);
+		snprintf(cache[ncache].name, sizeof cache[0].name, "%s", name);
+		snprintf(cache[ncache].cmd, sizeof cache[0].cmd, "%s", cmd);
+		ncache++;
+	}
+}
+
+void dock_compose(void)
+{
+	if (M.open) /* pas pendant que le menu du clic droit montre une appli */
+		return;
+	struct app nv[MAX_APPS];
+	int n = 0;
+	/* 1) épinglées */
+	for (int i = 0; i < S.ncfg && n < MAX_APPS; i++)
+		if (!S.cfg[i].power)
+			nv[n++] = S.cfg[i];
+	/* 2) ouvertes non épinglées, après un séparateur */
+	bool first = true;
+	for (int r = 0; r < S.nrunning && n < MAX_APPS - 2; r++) {
+		const char *id = S.running[r];
+		bool pinned = !*id;
+		for (int i = 0; i < S.ncfg && !pinned; i++)
+			if (!strcasecmp(S.cfg[i].app_id, id))
+				pinned = true;
+		if (pinned)
+			continue;
+		struct app a;
+		memset(&a, 0, sizeof a);
+		a.extra = true;
+		a.separator_before = first;
+		first = false;
+		snprintf(a.app_id, sizeof a.app_id, "%s", id);
+		desktop_lookup(id, a.label, a.cmd);
+		/* glyphe : 1re lettre du nom, en majuscule */
+		unsigned char c = (unsigned char)a.label[0];
+		if (c < 0x80)
+			snprintf(a.glyph, sizeof a.glyph, "%c", c >= 'a' && c <= 'z' ? c - 32 : c);
+		else {
+			int k = c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : 2;
+			snprintf(a.glyph, sizeof a.glyph, "%.*s", k, a.label);
+		}
+		nv[n++] = a;
+	}
+	/* 3) ⏻ (et ce qui suit), toujours séparé */
+	for (int i = 0; i < S.ncfg && n < MAX_APPS; i++)
+		if (S.cfg[i].power) {
+			nv[n] = S.cfg[i];
+			nv[n++].separator_before = true;
+		}
+	/* garder l'animation de survol des applis qui restent */
+	bool same = n == S.napps;
+	for (int i = 0; i < n; i++) {
+		for (int j = 0; j < S.napps; j++)
+			if (!strcmp(nv[i].label, S.apps[j].label) && !strcmp(nv[i].app_id, S.apps[j].app_id)) {
+				nv[i].hover = S.apps[j].hover;
+				break;
+			}
+		if (same && (strcmp(nv[i].label, S.apps[i].label) || nv[i].separator_before != S.apps[i].separator_before))
+			same = false;
+	}
+	if (same)
+		return;
+	memcpy(S.apps, nv, sizeof nv[0] * n);
+	S.napps = n;
+	dock_relayout();
+}
+#endif
 
 bool app_is_running(const struct app *a)
 {

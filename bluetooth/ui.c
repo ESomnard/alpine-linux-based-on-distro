@@ -1,6 +1,7 @@
 /* plume-bluetooth — dessin du panneau et interactions. */
 #include "panel.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -111,6 +112,7 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	rgba(cr, C_BG, 1);
 	cairo_paint(cr);
 	header(cr, W, "◇ BLUETOOTH", A.adapter);
+	pf_draw(cr, MARGIN, HEADER_H / 2, A.px, A.py);
 
 	if (!A.no_ctl && !A.no_adapter && A.loaded) {
 		struct rect r = { W - MARGIN - 112, HEADER_H / 2 - 15, 112, 30 };
@@ -179,10 +181,18 @@ static void activate(int i)
 
 void ui_click(double x, double y)
 {
+	switch (pf_clic(x, y)) {
+	case 0: break;
+	case 1: A.running = false; return;
+	default: return;
+	}
 	int arg = 0;
 	int act = hit_at(x, y, &arg);
-	if (!act)
+	if (!act) {
+		if (y < HEADER_H) /* double-clic dans le vide de l'en-tête : plein écran */
+			pf_entete_clic(x, y);
 		return;
+	}
 	if (act >= A_DEV && act <= A_FORGET && (arg < 0 || arg >= A.ndevs))
 		return;
 	switch (act) {

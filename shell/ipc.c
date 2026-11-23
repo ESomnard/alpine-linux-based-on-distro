@@ -164,6 +164,9 @@ void ipc_refresh_tree(void)
 	S.title[0] = S.focused_app[0] = '\0';
 	walk(j);
 	json_free(j);
+#ifdef PLUME_VOID
+	dock_compose(); /* zone du milieu : applis ouvertes non épinglées */
+#endif
 	mark_dirty(SURF_BAR);
 	mark_dirty(SURF_DOCK);
 }

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+Comment=Le terminal de Plume, avec onglets
+Exec=plume-terminal
+Icon=plume-term
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=terminal;console;shell;ligne de commande;

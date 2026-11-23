@@ -1,7 +1,7 @@
 # Plume Linux (Void, glibc) — paquets du système live ET installé.
 # Mêmes rôles que la version Alpine (rootfs/etc/plume/packages/*.list).
 # --- Socle ---
-sudo opendoas dbus seatd iwd openresolv dhcpcd chrony wget curl
+sudo opendoas dbus seatd iwd openresolv dhcpcd chrony wget curl net-tools
 zramen              # swap compressé en RAM
 brightnessctl
 cryptsetup grub grub-x86_64-efi efibootmgr dosfstools e2fsprogs gptfdisk   # installateur (LUKS2, BIOS + UEFI)

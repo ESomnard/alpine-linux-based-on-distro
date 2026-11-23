@@ -1,6 +1,7 @@
 /* plume-term — dessin : cadre HUD, barre d'onglets, grille de caractères. */
 #include "term.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -158,11 +159,25 @@ static bool hover(struct rect r)
 	return r.w > 0 && A.px >= r.x && A.px <= r.x + r.w && A.py >= r.y && A.py <= r.y + r.h;
 }
 
+/* clic sur les pastilles de fenêtre (leur position est connue ici, au dessin) */
+int term_pastilles_clic(double x, double y)
+{
+	return pf_clic(x, y);
+}
+
+/* clic dans le vide de la barre d'onglets : double-clic = plein écran / taille normale */
+void term_entete_clic(double x, double y)
+{
+	pf_entete_clic(x, y);
+}
+
 static void tabbar(cairo_t *cr, struct rect ta)
 {
 	double th = tabbar_h(), y0 = ta.y + FRAME, cy = y0 + th / 2 + 1;
 	double fs = A.font_px * 0.92;
 	double x = ta.x + FRAME + A.pad;
+	pf_draw(cr, x, cy, A.px, A.py);
+	x += PF_LARGEUR;
 	x += ui_text(cr, fs * 1.15, PANGO_WEIGHT_NORMAL, C_LINE, 1, x, cy, 0, 0, "◆") + fs * 0.6;
 
 	/* à droite : heure, taille après redimensionnement */

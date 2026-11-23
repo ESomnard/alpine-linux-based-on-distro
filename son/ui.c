@@ -1,6 +1,7 @@
 /* plume-son — dessin du panneau et interactions. */
 #include "panel.h"
 #include "theme.h"
+#include "fenetre.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -113,6 +114,7 @@ void ui_draw(cairo_t *cr, int Wi, int Hi)
 	rgba(cr, C_BG, 1);
 	cairo_paint(cr);
 	header(cr, W, "◇ SON", "PipeWire");
+	pf_draw(cr, MARGIN, HEADER_H / 2, A.px, A.py);
 
 	list_top = HEADER_H + 8;
 	list_bot = H - STATUS_H;
@@ -152,8 +154,15 @@ static void drag_to(double x)
 
 void ui_click(double x, double y)
 {
+	switch (pf_clic(x, y)) {
+	case 0: break;
+	case 1: A.running = false; return;
+	default: return;
+	}
 	int arg = 0;
 	int act = hit_at(x, y, &arg);
+	if (!act && y < HEADER_H) /* double-clic dans le vide de l'en-tête : plein écran */
+		pf_entete_clic(x, y);
 	if (!act || arg < 0 || arg >= A.nnodes)
 		return;
 	struct node *n = &A.nodes[arg];

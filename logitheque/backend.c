@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #define PW_KEEP 300.0 /* le mot de passe est oublié après 5 min */
@@ -352,6 +354,20 @@ static void fp_list_done(struct proc *p, int status)
 static void fp_remotes_done(struct proc *p, int status)
 {
 	A.flathub_ready = status == 0 && strstr(p->out, "flathub") != NULL;
+	/* Flathub ajouté ailleurs (pack Jeux, Émulation, terminal) : la liste des applis
+	 * (appstream) n'a peut-être jamais été téléchargée, et « flatpak search » ne trouve
+	 * alors rien. On la récupère une fois si elle manque ou date de plus de 7 jours. */
+	static bool checked;
+	if (A.flathub_ready && !checked && strstr(p->out, "user")) {
+		checked = true;
+		char path[512];
+		const char *home = getenv("HOME");
+		snprintf(path, sizeof path, "%s/.local/share/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz",
+			 home ? home : "");
+		struct stat st;
+		if (stat(path, &st) != 0 || time(NULL) - st.st_mtime > 7 * 24 * 3600)
+			queue_job(J_FP_APPSTREAM, "");
+	}
 	request_redraw();
 }
 
@@ -365,7 +381,7 @@ void refresh_flatpak(void)
 	}
 	char *l[] = { "flatpak", "list", "--app", "--columns=application,name,version,installation", NULL };
 	proc_run(l, NULL, fp_list_done, Q_FP_LIST, false);
-	char *r[] = { "flatpak", "remotes", "--columns=name", NULL };
+	char *r[] = { "flatpak", "remotes", "--columns=name,options", NULL };
 	proc_run(r, NULL, fp_remotes_done, Q_FP_REMOTES, false);
 }
 
