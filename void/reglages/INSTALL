@@ -12,6 +12,16 @@ post)
 		done
 		mkdir -p var/lib/plume && echo "$s" > var/lib/plume/nouveau.cksum
 	fi
+	# Papirus : seulement les icônes d'applis en 64 px (les PC qui ont reçu le thème complet
+	# gagnent ~100 Mo ; /etc/xbps.d/30-plume-papirus.conf évite qu'il revienne)
+	for t in usr/share/icons/*Papirus*; do
+		[ -d "$t" ] || continue
+		case "${t##*/}" in
+		Papirus) find "$t" -mindepth 1 -maxdepth 1 ! -name 64x64 ! -name index.theme -exec rm -rf {} + 2>/dev/null
+			find "$t/64x64" -mindepth 1 -maxdepth 1 ! -name apps -exec rm -rf {} + 2>/dev/null ;;
+		*) rm -rf "$t" ;;
+		esac
+	done
 	# profils AppArmor de Plume : pris en compte tout de suite
 	if command -v apparmor_parser >/dev/null 2>&1 && [ -d sys/kernel/security/apparmor ]; then
 		for p in etc/apparmor.d/plume-*; do apparmor_parser -r -W "/$p" 2>/dev/null; done

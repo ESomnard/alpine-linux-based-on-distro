@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Raccourcis
-Comment=Tous les raccourcis clavier en boutons (Super + F1)
+Comment=Tous les raccourcis clavier en boutons (Win + F1)
 Exec=plume-raccourcis
 Icon=input-keyboard
 Terminal=false

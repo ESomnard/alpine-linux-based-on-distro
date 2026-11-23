@@ -1,6 +1,6 @@
 #!/bin/sh
 # Plume (Void) — tous les raccourcis clavier en boutons, rangés par onglets.
-#   plume-raccourcis            ouvre le panneau (ou le ferme s'il est ouvert) — Super + F1
+#   plume-raccourcis            ouvre le panneau (ou le ferme s'il est ouvert) — Win + F1
 #   plume-raccourcis --faire X  exécute l'action X (appelé par les boutons)
 #   plume-raccourcis --texte    la liste en texte (plume-linux help)
 # Les actions sur une fenêtre visent celle qui était active à l'ouverture du panneau.
@@ -12,55 +12,55 @@ MOI=$(command -v plume-raccourcis || echo "$0")
 
 # action | onglet | bouton | raccourci | commande sway (comme dans ~/.config/sway/config)
 # onglet : 1 fenêtre, 2 applications, 3 bureaux, 4 son / écran / système
-ACTIONS='fermer|1|✕  Fermer la fenêtre|Alt+F4 · Super+Maj+Q|kill
-plein|1|▣  Plein écran (agrandir / revenir)|Super+F|fullscreen toggle
-libre|1|❐  Fenêtre libre / fixée|Super+Maj+Espace|floating toggle
-mgauche|1|◧  Moitié gauche de l'"'"'écran|Super+Ctrl+←|layout splith, move left
-mdroite|1|◨  Moitié droite de l'"'"'écran|Super+Ctrl+→|layout splith, move right
-cote|1|◫  Côte à côte (partager l'"'"'écran)|Super+F1 (ce panneau)|layout splith
-dessous|1|⊟  L'"'"'une sous l'"'"'autre|Super+F1 (ce panneau)|layout splitv
-onglets|1|▭  Fenêtres en onglets|Super+W|layout tabbed
-bascule|1|⇄  Changer la disposition|Super+T|layout toggle split
-splith|1|⇥  Prochaine fenêtre à côté|Super+H|splith
-splitv|1|⤓  Prochaine fenêtre en dessous|Super+V|splitv
-taille|1|⇔  Redimensionner (flèches, puis Entrée)|Super+R|mode resize
-fg|1|←  Aller à la fenêtre de gauche|Super+←|focus left
-fd|1|→  Aller à la fenêtre de droite|Super+→|focus right
-fh|1|↑  Aller à la fenêtre du haut|Super+↑|focus up
-fb|1|↓  Aller à la fenêtre du bas|Super+↓|focus down
-dg|1|⇐  Déplacer la fenêtre à gauche|Super+Maj+←|move left
-dd|1|⇒  Déplacer la fenêtre à droite|Super+Maj+→|move right
-dh|1|⇑  Déplacer la fenêtre en haut|Super+Maj+↑|move up
-db|1|⇓  Déplacer la fenêtre en bas|Super+Maj+↓|move down
-terminal|2|>_  Terminal|Super+Entrée|exec plume-terminal
-foot|2|>_  Terminal simple (foot)|Super+Maj+Entrée|exec foot
-menu|2|⣿  Toutes les applications|Super+D · Super+A|exec plume-menu
-firefox|2|◎  Firefox|Super+B|exec firefox
-fichiers|2|▤  Fichiers|Super+E|exec pcmanfm
-pilotage|2|◈  Poste de pilotage|Super+X|exec plume-term --hud -a plume-pilotage
-verrou|2|⚷  Verrouiller l'"'"'écran|Super+Échap|exec plume-hud -f || swaylock -f -c 1e1e2e
-eteindre|2|◍  Éteindre / redémarrer / veille / déconnexion|Super+Maj+E|exec plume-alimentation
-recharger|2|↻  Recharger la configuration|Super+Maj+C|reload
-b1|3|Aller au bureau 1|Super+1|workspace number 1
-b2|3|Aller au bureau 2|Super+2|workspace number 2
-b3|3|Aller au bureau 3|Super+3|workspace number 3
-b4|3|Aller au bureau 4|Super+4|workspace number 4
-b5|3|Aller au bureau 5|Super+5|workspace number 5
-b6|3|Aller au bureau 6|Super+6|workspace number 6
-b7|3|Aller au bureau 7|Super+7|workspace number 7
-b8|3|Aller au bureau 8|Super+8|workspace number 8
-b9|3|Aller au bureau 9|Super+9|workspace number 9
-b10|3|Aller au bureau 10|Super+0|workspace number 10
-e1|3|Envoyer la fenêtre au bureau 1|Super+Maj+1|move container to workspace number 1
-e2|3|Envoyer la fenêtre au bureau 2|Super+Maj+2|move container to workspace number 2
-e3|3|Envoyer la fenêtre au bureau 3|Super+Maj+3|move container to workspace number 3
-e4|3|Envoyer la fenêtre au bureau 4|Super+Maj+4|move container to workspace number 4
-e5|3|Envoyer la fenêtre au bureau 5|Super+Maj+5|move container to workspace number 5
-e6|3|Envoyer la fenêtre au bureau 6|Super+Maj+6|move container to workspace number 6
-e7|3|Envoyer la fenêtre au bureau 7|Super+Maj+7|move container to workspace number 7
-e8|3|Envoyer la fenêtre au bureau 8|Super+Maj+8|move container to workspace number 8
-e9|3|Envoyer la fenêtre au bureau 9|Super+Maj+9|move container to workspace number 9
-e10|3|Envoyer la fenêtre au bureau 10|Super+Maj+0|move container to workspace number 10
+ACTIONS='fermer|1|✕  Fermer la fenêtre|Alt+F4 · Win+Maj+Q|kill
+plein|1|▣  Plein écran (agrandir / revenir)|Win+F|fullscreen toggle
+libre|1|❐  Fenêtre libre / fixée|Win+Maj+Espace|floating toggle
+mgauche|1|◧  Moitié gauche de l'"'"'écran|Win+Ctrl+←|layout splith, move left
+mdroite|1|◨  Moitié droite de l'"'"'écran|Win+Ctrl+→|layout splith, move right
+cote|1|◫  Côte à côte (partager l'"'"'écran)|bouton ici seulement|layout splith
+dessous|1|⊟  L'"'"'une sous l'"'"'autre|bouton ici seulement|layout splitv
+onglets|1|▭  Fenêtres en onglets|Win+W|layout tabbed
+bascule|1|⇄  Changer la disposition|Win+T|layout toggle split
+splith|1|⇥  Prochaine fenêtre à côté|Win+H|splith
+splitv|1|⤓  Prochaine fenêtre en dessous|Win+V|splitv
+taille|1|⇔  Redimensionner (flèches, puis Entrée)|Win+R|mode resize
+fg|1|←  Aller à la fenêtre de gauche|Win+←|focus left
+fd|1|→  Aller à la fenêtre de droite|Win+→|focus right
+fh|1|↑  Aller à la fenêtre du haut|Win+↑|focus up
+fb|1|↓  Aller à la fenêtre du bas|Win+↓|focus down
+dg|1|⇐  Déplacer la fenêtre à gauche|Win+Maj+←|move left
+dd|1|⇒  Déplacer la fenêtre à droite|Win+Maj+→|move right
+dh|1|⇑  Déplacer la fenêtre en haut|Win+Maj+↑|move up
+db|1|⇓  Déplacer la fenêtre en bas|Win+Maj+↓|move down
+terminal|2|>_  Terminal|Win+Entrée|exec plume-terminal
+foot|2|>_  Terminal simple (foot)|Win+Maj+Entrée|exec foot
+menu|2|⣿  Toutes les applications|Win+D · Win+A|exec plume-menu
+firefox|2|◎  Firefox|Win+B|exec firefox
+fichiers|2|▤  Fichiers|Win+E|exec pcmanfm
+pilotage|2|◈  Poste de pilotage|Win+X|exec plume-term --hud -a plume-pilotage
+verrou|2|⚷  Verrouiller l'"'"'écran|Win+Échap|exec plume-hud -f || swaylock -f -c 1e1e2e
+eteindre|2|◍  Éteindre / redémarrer / veille / déconnexion|Win+Maj+E|exec plume-alimentation
+recharger|2|↻  Recharger la configuration|Win+Maj+C|reload
+b1|3|Aller au bureau 1|Win+1|workspace number 1
+b2|3|Aller au bureau 2|Win+2|workspace number 2
+b3|3|Aller au bureau 3|Win+3|workspace number 3
+b4|3|Aller au bureau 4|Win+4|workspace number 4
+b5|3|Aller au bureau 5|Win+5|workspace number 5
+b6|3|Aller au bureau 6|Win+6|workspace number 6
+b7|3|Aller au bureau 7|Win+7|workspace number 7
+b8|3|Aller au bureau 8|Win+8|workspace number 8
+b9|3|Aller au bureau 9|Win+9|workspace number 9
+b10|3|Aller au bureau 10|Win+0|workspace number 10
+e1|3|Envoyer la fenêtre au bureau 1|Win+Maj+1|move container to workspace number 1
+e2|3|Envoyer la fenêtre au bureau 2|Win+Maj+2|move container to workspace number 2
+e3|3|Envoyer la fenêtre au bureau 3|Win+Maj+3|move container to workspace number 3
+e4|3|Envoyer la fenêtre au bureau 4|Win+Maj+4|move container to workspace number 4
+e5|3|Envoyer la fenêtre au bureau 5|Win+Maj+5|move container to workspace number 5
+e6|3|Envoyer la fenêtre au bureau 6|Win+Maj+6|move container to workspace number 6
+e7|3|Envoyer la fenêtre au bureau 7|Win+Maj+7|move container to workspace number 7
+e8|3|Envoyer la fenêtre au bureau 8|Win+Maj+8|move container to workspace number 8
+e9|3|Envoyer la fenêtre au bureau 9|Win+Maj+9|move container to workspace number 9
+e10|3|Envoyer la fenêtre au bureau 10|Win+Maj+0|move container to workspace number 10
 volp|4|♪  Volume +|touche Volume +|exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
 volm|4|♪  Volume −|touche Volume −|exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
 muet|4|♪  Son coupé / remis|touche Muet|exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
@@ -70,11 +70,11 @@ lumm|4|☼  Luminosité −|touche Luminosité −|exec brightnessctl set 5%-
 capzone|4|⬚  Capture d'"'"'une zone (copiée)|Impr|exec grim -g "$(slurp)" - | wl-copy
 capecran|4|▢  Capture de l'"'"'écran (fichier)|Maj+Impr|exec grim ~/capture-$(date +%Y%m%d-%H%M%S).png
 clavier|4|⌨  Changer de clavier (fr / us)|Alt+Maj|input type:keyboard xkb_switch_layout next
-pinyin|4|拼  Saisie chinoise (pinyin)|Super+Espace|exec ~/.config/sway/pinyin-toggle.sh
-nuit|4|☾  Lumière du soir|Super+N|exec plume-nuit
-loupe|4|⊕  Loupe|Super+Alt+Z|exec plume-accessibilite loupe
-lecteur|4|◌  Lecteur d'"'"'écran|Super+Alt+S|exec plume-accessibilite lecteur
-clavierecran|4|⌨  Clavier à l'"'"'écran|Super+Alt+K|exec plume-accessibilite clavier'
+pinyin|4|拼  Saisie chinoise (pinyin)|Win+Espace|exec ~/.config/sway/pinyin-toggle.sh
+nuit|4|☾  Lumière du soir|Win+N|exec plume-nuit
+loupe|4|⊕  Loupe|Win+Alt+Z|exec plume-accessibilite loupe
+lecteur|4|◌  Lecteur d'"'"'écran|Win+Alt+S|exec plume-accessibilite lecteur
+clavierecran|4|⌨  Clavier à l'"'"'écran|Win+Alt+K|exec plume-accessibilite clavier'
 
 fermer_panneau() {
 	[ -r "$PIDS" ] && kill $(cat "$PIDS") 2>/dev/null
@@ -84,7 +84,7 @@ fermer_panneau() {
 if [ "${1:-}" = --texte ]; then
 	# couleurs seulement dans un vrai terminal
 	if [ -t 1 ]; then T=$(printf '\033[1;36m') K=$(printf '\033[1m') Z=$(printf '\033[0m'); else T="" K="" Z=""; fi
-	printf '%sRaccourcis clavier de Plume Linux%s   (Super = touche Windows ; en boutons : Super + F1)\n' "$K" "$Z"
+	printf '%sRaccourcis clavier de Plume Linux%s   (Win = la touche Windows ⊞, en bas entre Ctrl et Alt ; en boutons : Win + F1)\n' "$K" "$Z"
 	# C.UTF-8 : awk compte les caractères (accents, flèches), pas les octets -> colonnes alignées
 	printf '%s\n' "$ACTIONS" | LC_ALL=C.UTF-8 awk -F'|' -v T="$T" -v K="$K" -v Z="$Z" '
 		BEGIN { titre[1] = "FENÊTRE"; titre[2] = "APPLICATIONS"; titre[3] = "BUREAUX"; titre[4] = "SON, ÉCRAN, ACCESSIBILITÉ" }
@@ -93,8 +93,8 @@ if [ "${1:-}" = --texte ]; then
 			if ($2 != o) { printf "\n%s%s%s\n", T, titre[$2], Z; o = $2 }
 			nom = $3; sub(/^[^ ]+  /, "", nom)          # sans le symbole du bouton
 			r = $4
-			if ($1 == "b1") { r = "Super+1 … Super+0"; nom = "Aller au bureau 1 à 10" }
-			if ($1 == "e1") { r = "Super+Maj+1 … 0"; nom = "Envoyer la fenêtre au bureau 1 à 10" }
+			if ($1 == "b1") { r = "Win+1 … Win+0"; nom = "Aller au bureau 1 à 10" }
+			if ($1 == "e1") { r = "Win+Maj+1 … 0"; nom = "Envoyer la fenêtre au bureau 1 à 10" }
 			printf "  %s%-24s%s %s\n", K, r, Z, nom
 		}'
 	exit 0
@@ -121,28 +121,27 @@ command -v yad >/dev/null || { notify-send -a Plume "Raccourcis" "yad manque : s
 # fenêtre active (jamais un bureau entier : « Fermer » ne doit fermer qu'une fenêtre)
 swaymsg -t get_tree 2>/dev/null | jq -r 'first(.. | objects | select(.focused == true and (.type == "con" or .type == "floating_con")) | .id) // empty' > "$CIBLE"
 
-CLE=$(( $$ + 41000 ))
-onglet() { # onglet N -> un formulaire de boutons dans l'onglet N
-	n=$1
-	set --
-	TAB=$(printf '\t')
+# Une seule fenêtre (pas d'onglets : « yad --notebook » ne marche que sous X11, absent de Plume) :
+# un titre par thème, puis ses boutons, sur deux colonnes qui défilent.
+set --
+TAB=$(printf '\t')
+TITRES="Fenêtre|Applications|Bureaux|Son, écran, accessibilité"
+for n in 1 2 3 4; do
+	titre=$(printf '%s' "$TITRES" | cut -d'|' -f"$n")
+	set -- "$@" --field "<b><big>$titre</big></b>:LBL" ""
 	lignes=$(printf '%s\n' "$ACTIONS" | awk -F'|' -v n="$n" -v t="$TAB" '$2==n { print $1 t $3 t $4 }')
 	while IFS="$TAB" read -r cle bouton raccourci; do
 		set -- "$@" --field "$bouton   —   $raccourci:FBTN" "$MOI --faire $cle"
 	done <<EOF
 $lignes
 EOF
-	yad --plug="$CLE" --tabnum="$n" --form --columns=2 --scroll "$@" >/dev/null 2>&1 &
-	echo $! >> "$PIDS"
-}
+done
 
 : > "$PIDS"
-for n in 1 2 3 4; do onglet "$n"; done
-yad --notebook --key="$CLE" --title "Raccourcis Plume" --window-icon input-keyboard \
-	--width 900 --height 560 --center \
-	--text "<b>Tous les raccourcis en boutons.</b>  Clique : l'action s'applique à la fenêtre que tu utilisais." \
-	--tab "Fenêtre" --tab "Applications" --tab "Bureaux" --tab "Son, écran, accessibilité" \
-	--button "Fermer:1" >/dev/null 2>&1 &
+yad --form --columns=2 --scroll --title "Raccourcis Plume" --window-icon plume-raccourcis \
+	--width 1000 --height 640 --center \
+	--text "<b>Tous les raccourcis en boutons.</b>  <b>Win</b> = la touche Windows ⊞ (en bas, entre Ctrl et Alt).  Clique : l'action s'applique à la fenêtre que tu utilisais.  (En texte : plume-linux help)" \
+	--button "Fermer:1" "$@" >/dev/null 2>&1 &
 echo $! >> "$PIDS"
 wait $!
 fermer_panneau

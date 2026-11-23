@@ -5,6 +5,17 @@ set -eu
 R=$1
 P=$R/etc/plume
 
+# Papirus : seulement les icônes d'applis en 64 px (8 000 fichiers au lieu de 103 000 ; même règle
+# pour les mises à jour : /etc/xbps.d/30-plume-papirus.conf)
+for t in "$R"/usr/share/icons/*Papirus*; do
+	[ -d "$t" ] || continue
+	case "${t##*/}" in
+	Papirus) find "$t" -mindepth 1 -maxdepth 1 ! -name 64x64 ! -name index.theme -exec rm -rf {} + ;
+		find "$t/64x64" -mindepth 1 -maxdepth 1 ! -name apps -exec rm -rf {} + 2>/dev/null || true ;;
+	*) rm -rf "$t" ;;
+	esac
+done
+
 # scripts : exécutables, sudoers lisible par sudo seulement
 chmod 0755 "$P"/*.sh "$P"/bin/apt "$P"/conf/plume-* 2>/dev/null || true
 chmod 0440 "$R/etc/sudoers.d/plume"
