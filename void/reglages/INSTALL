@@ -22,6 +22,9 @@ post)
 		*) rm -rf "$t" ;;
 		esac
 	done
+	# apt, apt-get, apt-cache : traduits vers xbps (/etc/plume/bin/apt)
+	mkdir -p usr/local/bin
+	for c in apt apt-get apt-cache; do ln -sf /etc/plume/bin/apt "usr/local/bin/$c"; done
 	# profils AppArmor de Plume : pris en compte tout de suite
 	if command -v apparmor_parser >/dev/null 2>&1 && [ -d sys/kernel/security/apparmor ]; then
 		for p in etc/apparmor.d/plume-*; do apparmor_parser -r -W "/$p" 2>/dev/null; done

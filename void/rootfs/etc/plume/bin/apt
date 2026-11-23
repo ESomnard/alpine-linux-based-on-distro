@@ -118,7 +118,11 @@ upgrade|full-upgrade|dist-upgrade)
 install)
 	need_root
 	[ $# -gt 0 ] || { err "indique au moins un paquet : sudo $prog install NOM"; exit 100; }
-	exists bash || xbps-install -S >/dev/null 2>&1 || true
+	# liste des paquets à jour d'abord (sinon : version disparue des serveurs, téléchargement en échec),
+	# et xbps lui-même s'il le faut (il refuse d'installer quoi que ce soit tant qu'il est trop vieux)
+	note "• liste des paquets mise à jour…"
+	xbps-install -S >/dev/null 2>&1 || true
+	xbps-install -un 2>/dev/null | grep -q '^xbps-[0-9]' && xbps-install -uy xbps >/dev/null 2>&1
 	pkgs=""
 	for p in "$@"; do
 		case "$p" in

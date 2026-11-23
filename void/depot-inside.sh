@@ -121,12 +121,12 @@ R=$W/void/rootfs
 cd "$R"
 for f in etc/plume/dock.conf etc/sway/config.d/*.conf etc/modprobe.d/plume-*.conf etc/dracut.conf.d/plume-*.conf \
 	etc/profile.d/plume-void.sh etc/xbps.d/*.conf etc/apparmor.d/plume-* etc/apparmor.d/abstractions/plume-* \
-	etc/xdg/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal/sway-portals.conf usr/lib/plume/*; do
+	etc/xdg/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal/sway-portals.conf usr/lib/plume/* etc/plume/bin/apt; do
 	[ -f "$R/$f" ] || continue
 	install -Dm644 "$R/$f" "$D/$f"
 done
 cd /
-chmod 755 "$D"/usr/lib/plume/*
+chmod 755 "$D"/usr/lib/plume/* "$D"/etc/plume/bin/apt
 install -m755 "$W/void/reglages/INSTALL" "$D/INSTALL"
 finir plume-reglages "Réglages de Plume (dock, sway, portables NVIDIA, AppArmor), mis à jour avec le système" "" noarch
 
