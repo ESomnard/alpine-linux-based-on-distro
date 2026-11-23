@@ -47,7 +47,7 @@ static uint32_t now_ms(void)
 int main(int argc, char **argv)
 {
 	if (argc < 6) {
-		fprintf(stderr, "usage : vpointer W H click X Y [bouton [ms]] | dblclick X Y | menu X1 Y1 X2 Y2 [ms] | drag X1 Y1 X2 Y2 [right] | move X Y [ms]\n");
+		fprintf(stderr, "usage : vpointer W H click X Y [bouton [ms]] | dblclick X Y | menu X1 Y1 X2 Y2 [ms] | drag X1 Y1 X2 Y2 [left|right [ms]] | move X Y [ms]\n");
 		return 2;
 	}
 	struct wl_display *dpy = wl_display_connect(NULL);
@@ -100,10 +100,16 @@ int main(int argc, char **argv)
 	} else if (!strcmp(cmd, "drag") && argc >= 8) {
 		int x1 = atoi(argv[4]), y1 = atoi(argv[5]), x2 = atoi(argv[6]), y2 = atoi(argv[7]);
 		uint32_t b = argc > 8 && !strcmp(argv[8], "right") ? BTN_RIGHT : BTN_LEFT;
+		int hold = argc > 9 ? atoi(argv[9]) : 0; /* geste lent : petits pas, pause avant de lâcher */
+		int steps = hold ? 24 : 8;
 		MOVE(x1, y1);
 		BTN(b, WL_POINTER_BUTTON_STATE_PRESSED);
-		for (int i = 1; i <= 8; i++)
-			MOVE(x1 + (x2 - x1) * i / 8, y1 + (y2 - y1) * i / 8);
+		for (int i = 1; i <= steps; i++)
+			MOVE(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
+		if (hold) {
+			for (int i = 0; i < hold / 150; i++) /* la souris frémit sur place, comme une vraie main */
+				MOVE(x2 + (i & 1), y2);
+		}
 		BTN(b, WL_POINTER_BUTTON_STATE_RELEASED);
 	}
 	pause_ms(200);

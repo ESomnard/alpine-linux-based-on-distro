@@ -7,7 +7,11 @@
  *   clic droit sur une icône : Ouvrir · Renommer · Dupliquer · Copier le chemin · Mettre à la corbeille
  *   clic droit dans le vide : Nouveau dossier · Nouveau document · Ranger · Ouvrir dans Fichiers ·
  *                             Changer le fond d'écran
- *   Suppr : corbeille · F2 : renommer · Ctrl+A : tout · Échap : rien
+ *   Suppr : corbeille · F2 : renommer · Ctrl+A : tout · Échap : rien · Espace : aperçu rapide
+ *   glisser-déposer (comme sur Mac) : depuis Fichiers vers le bureau (déplacé ; copié s'il vient d'un
+ *   autre disque), du bureau vers Fichiers ou une appli, sur un dossier du bureau pour l'y ranger
+ *   Copier / Couper / Coller (menu, Ctrl+C / Ctrl+X / Ctrl+V) : même presse-papiers que Fichiers
+ *   clés USB et disques externes : affichés sur le bureau, clic droit > Éjecter
  *
  * Surface wlr-layer-shell sur la couche « bottom » : au-dessus du fond d'écran, sous les fenêtres.
  * Le dossier est surveillé (inotify) : un fichier enregistré sur le Bureau apparaît tout de suite.
@@ -55,13 +59,14 @@
 
 /* ------------------------------ état -------------------------------- */
 
-enum kind { K_FILE, K_DIR, K_APP, K_IMAGE };
+enum kind { K_FILE, K_DIR, K_APP, K_IMAGE, K_DISK };
 
 struct item {
 	char name[256];         /* nom du fichier */
 	char label[256];        /* affiché (nom de l'appli pour un .desktop) */
 	char ext[12];
 	char exec[512], icon[256];
+	char mnt[512];          /* disque externe : point de montage (sinon vide) */
 	enum kind kind;
 	int col, row;           /* place dans la grille (col 0 = à droite) */
 	bool sel, placed;
@@ -72,9 +77,11 @@ struct item {
 enum drag { D_NONE, D_PRESS_ICON, D_MOVE, D_PRESS_EMPTY, D_BAND };
 
 struct menu_entry { char label[48]; int act; bool sep; };
-enum { A_OPEN = 1, A_RENAME, A_DUP, A_PATH, A_TRASH, A_NEWDIR, A_NEWDOC, A_SORT, A_FILES, A_WALL };
+enum { A_OPEN = 1, A_RENAME, A_DUP, A_PATH, A_TRASH, A_NEWDIR, A_NEWDOC, A_SORT, A_FILES, A_WALL, A_EJECT, A_PREVIEW, A_COPY, A_CUT, A_PASTE };
 
 struct buffer { struct wl_buffer *wl; void *data; size_t size; cairo_surface_t *cs; int w, h; bool busy; };
+/* ce qu'une autre appli propose (glisser-déposer ou presse-papiers) */
+struct offer_info { bool uri, gnome; uint32_t action; };
 
 static struct {
 	struct wl_display *display;
@@ -122,7 +129,36 @@ static struct {
 	bool rename_fresh;      /* nom encore tout sélectionné : la 1re touche le remplace (comme sur Mac) */
 
 	int ino;
-} B = { .hover = -1, .press_item = -1, .rename_idx = -1, .menu_hover = -1, .last_click_item = -1, .ino = -1 };
+	bool ino_reload;        /* relire le dossier (fichiers partis par glisser-déposer) */
+
+	/* glisser-déposer (wl_data_device) */
+	struct wl_data_device_manager *ddm;
+	uint32_t ddm_ver;
+	struct wl_data_device *dd;
+	uint32_t press_serial;
+	struct wl_data_offer *offer;      /* ce qu'on glisse au-dessus du bureau */
+	struct wl_data_offer *drop_offer; /* ce qui vient d'être lâché (lecture en cours) */
+	int drop_fd;
+	char *drop_buf;
+	size_t drop_len;
+	double drop_x, drop_y;
+	int drop_target;                  /* dossier ou disque survolé pendant un glisser (-1 : aucun) */
+	int drop_dest;                    /* le même, gardé au moment du lâcher (« leave » suit le lâcher) */
+	struct wl_data_source *src;       /* glisser parti du bureau */
+	bool dragging_out;
+	struct wl_surface *drag_icon;
+	struct buffer drag_buf;
+	pid_t preview_pid;                /* aperçu rapide (Espace) */
+	uint32_t input_serial;            /* dernier clic ou touche (pour prendre le presse-papiers) */
+	struct wl_data_source *clip;      /* ce que le bureau a copié */
+	char clip_text[16384];            /* « copy » ou « cut », puis les adresses file:// */
+	struct wl_data_offer *sel_offer;  /* ce que contient le presse-papiers (venant d'ailleurs) */
+	int paste_fd;
+	char *paste_buf;
+	size_t paste_len;
+	bool paste_gnome;                 /* format « x-special/gnome-copied-files » (copy/cut en 1re ligne) */
+	int mounts_fd;                    /* /proc/self/mounts : clés USB branchées / retirées */
+} B = { .drop_fd = -1, .drop_target = -1, .mounts_fd = -1, .paste_fd = -1, .hover = -1, .press_item = -1, .rename_idx = -1, .menu_hover = -1, .last_click_item = -1, .ino = -1 };
 
 static double now_s(void)
 {
@@ -171,7 +207,10 @@ static void run_sh(const char *cmd)
 
 static void item_path(const struct item *it, char *out, size_t cap)
 {
-	snprintf(out, cap, "%s/%s", B.dir, it->name);
+	if (it->mnt[0])
+		snprintf(out, cap, "%s", it->mnt);
+	else
+		snprintf(out, cap, "%s/%s", B.dir, it->name);
 }
 
 static void open_item(struct item *it)
@@ -376,6 +415,31 @@ static void load_items(void)
 	}
 	if (d)
 		closedir(d);
+	/* clés USB et disques externes montés (udiskie) : /run/media/<toi>/<nom> */
+	const char *user = getenv("USER");
+	char media[300];
+	snprintf(media, sizeof media, "/run/media/%s", user ? user : "");
+	struct stat pst;
+	DIR *md = user && !stat(media, &pst) ? opendir(media) : NULL;
+	while (md && (e = readdir(md)) && B.n < MAX_ITEMS) {
+		if (e->d_name[0] == '.')
+			continue;
+		struct item *it = &B.items[B.n];
+		memset(it, 0, sizeof *it);
+		snprintf(it->mnt, sizeof it->mnt, "%s/%s", media, e->d_name);
+		struct stat st;
+		if (stat(it->mnt, &st) || !S_ISDIR(st.st_mode) || st.st_dev == pst.st_dev)
+			continue; /* pas (ou plus) monté */
+		it->kind = K_DISK;
+		snprintf(it->name, sizeof it->name, "disque:%s", e->d_name);
+		snprintf(it->label, sizeof it->label, "%s", e->d_name);
+		for (int j = 0; j < nold; j++)
+			if (!strcmp(old[j].name, it->name))
+				it->sel = old[j].sel;
+		B.n++;
+	}
+	if (md)
+		closedir(md);
 	for (int j = 0; j < nold; j++)
 		free_item(&old[j]);
 	/* places enregistrées, puis les nouveaux dans les cases libres */
@@ -416,8 +480,8 @@ static void sort_items(void)
 	B.dirty = true;
 }
 
-/* nom libre : « Nouveau dossier », « Nouveau dossier 2 »… */
-static void unique_name(const char *base, const char *ext, char *out, size_t cap)
+/* nom libre dans DIR : « Nouveau dossier », « Nouveau dossier 2 »… */
+static void unique_in(const char *dir, const char *base, const char *ext, char *out, size_t cap)
 {
 	struct stat st;
 	for (int i = 1; i < 1000; i++) {
@@ -426,10 +490,15 @@ static void unique_name(const char *base, const char *ext, char *out, size_t cap
 			snprintf(out, cap, "%s%s", base, ext);
 		else
 			snprintf(out, cap, "%s %d%s", base, i, ext);
-		snprintf(p, sizeof p, "%s/%s", B.dir, out);
-		if (stat(p, &st))
+		snprintf(p, sizeof p, "%s/%s", dir, out);
+		if (lstat(p, &st))
 			return;
 	}
+}
+
+static void unique_name(const char *base, const char *ext, char *out, size_t cap)
+{
+	unique_in(B.dir, base, ext, out, cap);
 }
 
 /* corbeille freedesktop : ~/.local/share/Trash/{files,info} */
@@ -697,6 +766,28 @@ static void draw_folder(cairo_t *cr, double x, double y, double s)
 	cairo_fill(cr);
 }
 
+/* disque externe : boîtier argenté avec un voyant */
+static void draw_disk(cairo_t *cr, double x, double y, double s)
+{
+	double w = s, h = s * 0.62, top = y + (s - h) / 2 + 4;
+	cairo_pattern_t *g = cairo_pattern_create_linear(0, top, 0, top + h);
+	cairo_pattern_add_color_stop_rgb(g, 0, 0.93, 0.95, 0.97);
+	cairo_pattern_add_color_stop_rgb(g, 1, 0.66, 0.70, 0.76);
+	rrect(cr, x + 3, top, w - 6, h, 8);
+	cairo_set_source(cr, g);
+	cairo_fill_preserve(cr);
+	cairo_pattern_destroy(g);
+	cairo_set_source_rgba(cr, 0, 0, 0, 0.25);
+	cairo_set_line_width(cr, 1);
+	cairo_stroke(cr);
+	cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+	cairo_rectangle(cr, x + 10, top + h * 0.62, w - 20, 1.5);
+	cairo_fill(cr);
+	cairo_arc(cr, x + w - 14, top + h * 0.80, 2.6, 0, 2 * M_PI);
+	cairo_set_source_rgb(cr, 0.31, 0.88, 0.64);
+	cairo_fill(cr);
+}
+
 /* document : feuille blanche au coin plié + bande de couleur avec l'extension */
 static void draw_document(cairo_t *cr, double x, double y, double s, const char *ext)
 {
@@ -864,7 +955,14 @@ static void draw_item(cairo_t *cr, struct item *it, int idx, double dx, double d
 	cx += dx;
 	cy += dy;
 	double ix = cx + (CELL_W - ICON) / 2.0, iy = cy + 6;
-	if (it->sel || idx == B.hover) {
+	if (idx == B.drop_target) { /* dossier ou disque où l'on va lâcher : il s'éclaire */
+		rrect(cr, ix - 7, iy - 6, ICON + 14, ICON + 12, 9);
+		rgba(cr, ACCENT, 0.35);
+		cairo_fill_preserve(cr);
+		rgba(cr, ACCENT, 1);
+		cairo_set_line_width(cr, 2);
+		cairo_stroke(cr);
+	} else if (it->sel || idx == B.hover) {
 		rrect(cr, ix - 6, iy - 5, ICON + 12, ICON + 10, 8);
 		cairo_set_source_rgba(cr, 1, 1, 1, it->sel ? 0.22 : 0.10);
 		cairo_fill(cr);
@@ -873,6 +971,8 @@ static void draw_item(cairo_t *cr, struct item *it, int idx, double dx, double d
 	cairo_surface_t *img = (it->kind == K_IMAGE || it->kind == K_APP) ? item_image(it) : NULL;
 	if (it->kind == K_DIR) {
 		draw_folder(cr, ix, iy, ICON);
+	} else if (it->kind == K_DISK) {
+		draw_disk(cr, ix, iy, ICON);
 	} else if (img) {
 		double s = ICON;
 		if (it->kind == K_IMAGE) { /* vignette avec un cadre blanc */
@@ -1145,20 +1245,33 @@ static void menu_show(double x, double y, int on_item)
 	if (B.menu_col < 0) B.menu_col = 0;
 	if (B.menu_col >= cols) B.menu_col = cols - 1;
 	if (B.menu_row < 0) B.menu_row = 0;
-	if (on_item >= 0) {
+	if (on_item >= 0 && B.items[on_item].kind == K_DISK) {
+		clear_sel();
+		B.items[on_item].sel = true;
+		menu_add("Ouvrir", A_OPEN, false);
+		menu_add("Éjecter", A_EJECT, true);
+	} else if (on_item >= 0) {
 		if (!B.items[on_item].sel) {
 			clear_sel();
 			B.items[on_item].sel = true;
 		}
 		menu_add("Ouvrir", A_OPEN, false);
+		menu_add("Aperçu rapide (Espace)", A_PREVIEW, false);
 		if (nsel() == 1)
 			menu_add("Renommer", A_RENAME, true);
-		menu_add("Dupliquer", A_DUP, nsel() != 1);
+		menu_add("Copier", A_COPY, nsel() != 1);
+		menu_add("Couper", A_CUT, false);
+		menu_add("Dupliquer", A_DUP, false);
 		menu_add("Copier le chemin", A_PATH, false);
 		menu_add("Mettre à la corbeille", A_TRASH, true);
 	} else {
 		clear_sel();
-		menu_add("Nouveau dossier", A_NEWDIR, false);
+		{
+			struct offer_info *inf = B.sel_offer ? wl_data_offer_get_user_data(B.sel_offer) : NULL;
+			if (inf && (inf->gnome || inf->uri))
+				menu_add("Coller", A_PASTE, false);
+		}
+		menu_add("Nouveau dossier", A_NEWDIR, B.nmenu > 0);
 		menu_add("Nouveau document texte", A_NEWDOC, false);
 		menu_add("Ranger par nom", A_SORT, true);
 		menu_add("Ouvrir le Bureau dans Fichiers", A_FILES, false);
@@ -1197,6 +1310,10 @@ static void create_at_menu(const char *base, const char *ext, bool dir)
 		}
 }
 
+static void preview_toggle(void);
+static void clip_set(bool cut);
+static void paste_start(void);
+
 static void do_action(int act)
 {
 	B.menu_open = false;
@@ -1225,9 +1342,31 @@ static void do_action(int act)
 		break;
 	case A_TRASH:
 		for (int i = 0; i < B.n; i++)
-			if (B.items[i].sel)
+			if (B.items[i].sel && B.items[i].kind != K_DISK)
 				trash_item(&B.items[i]);
 		load_items();
+		break;
+	case A_EJECT:
+		for (int i = 0; i < B.n; i++)
+			if (B.items[i].sel && B.items[i].kind == K_DISK) {
+				char *argv[] = { "sh", "-c",
+					"d=$(findmnt -no SOURCE \"$1\"); udisksctl unmount --no-user-interaction -b \"$d\" && "
+					"{ udisksctl power-off --no-user-interaction -b \"$d\" 2>/dev/null; "
+					"notify-send -a Plume \"Disque éjecté\" \"Tu peux le débrancher.\"; } || "
+					"notify-send -a Plume -u critical \"Impossible d'éjecter\" \"Un fichier du disque est peut-être encore ouvert.\"",
+					"sh", B.items[i].mnt, NULL };
+				run_argv(argv);
+			}
+		break;
+	case A_PREVIEW:
+		preview_toggle();
+		break;
+	case A_COPY:
+	case A_CUT:
+		clip_set(act == A_CUT);
+		break;
+	case A_PASTE:
+		paste_start();
 		break;
 	case A_NEWDIR:
 		create_at_menu("Nouveau dossier", "", true);
@@ -1289,6 +1428,597 @@ static void band_select(void)
 	}
 }
 
+
+static void src_target_noop(void *d, struct wl_data_source *s, const char *m) { (void)d; (void)s; (void)m; }
+static void paste_files(char *text, bool cut);
+
+/* -------------------------- aperçu rapide ---------------------------- */
+
+/* Espace (ou menu) : l'image, le PDF, le son ou la vidéo s'ouvre dans une visionneuse légère ;
+ * Espace à nouveau la referme tant que le bureau a la main */
+static void preview_toggle(void)
+{
+	if (B.preview_pid > 0 && kill(B.preview_pid, 0) == 0) {
+		kill(B.preview_pid, SIGTERM);
+		B.preview_pid = 0;
+		return;
+	}
+	B.preview_pid = 0;
+	int i = -1;
+	for (int k = 0; k < B.n && i < 0; k++)
+		if (B.items[k].sel && B.items[k].kind != K_DISK && B.items[k].kind != K_DIR)
+			i = k;
+	if (i < 0)
+		return;
+	static const char *AV[] = { "mp3", "ogg", "oga", "opus", "flac", "wav", "m4a", "mp4", "mkv", "webm", "avi", "mov", NULL };
+	const char *prog = "xdg-open";
+	if (B.items[i].kind == K_IMAGE)
+		prog = "imv";
+	else if (!strcmp(B.items[i].ext, "pdf"))
+		prog = "zathura";
+	else
+		for (int k = 0; AV[k]; k++)
+			if (!strcmp(B.items[i].ext, AV[k]))
+				prog = "mpv";
+	char p[PATH_MAX];
+	item_path(&B.items[i], p, sizeof p);
+	pid_t pid = fork();
+	if (pid == 0) {
+		setsid();
+		execlp(prog, prog, p, (char *)NULL);
+		_exit(127);
+	}
+	if (pid > 0)
+		B.preview_pid = pid;
+}
+
+/* ------------------------- glisser-déposer --------------------------- */
+
+#define DND_COPY WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY
+#define DND_MOVE WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE
+
+
+static void of_offer(void *d, struct wl_data_offer *o, const char *mime)
+{
+	(void)o;
+	if (!strcmp(mime, "text/uri-list"))
+		((struct offer_info *)d)->uri = true;
+	else if (!strcmp(mime, "x-special/gnome-copied-files"))
+		((struct offer_info *)d)->gnome = true;
+}
+static void of_source_actions(void *d, struct wl_data_offer *o, uint32_t a) { (void)d; (void)o; (void)a; }
+static void of_action(void *d, struct wl_data_offer *o, uint32_t a)
+{
+	(void)o;
+	((struct offer_info *)d)->action = a;
+}
+static const struct wl_data_offer_listener offer_listener = {
+	.offer = of_offer, .source_actions = of_source_actions, .action = of_action,
+};
+
+static void offer_free(struct wl_data_offer *o)
+{
+	if (!o)
+		return;
+	free(wl_data_offer_get_user_data(o));
+	wl_data_offer_destroy(o);
+}
+
+/* dossier ou disque du bureau sous la souris, qui peut recevoir ce qu'on glisse */
+static int drop_target_at(double x, double y)
+{
+	int i = item_at(x, y);
+	if (i < 0 || (B.items[i].kind != K_DIR && B.items[i].kind != K_DISK))
+		return -1;
+	if (B.dragging_out && B.items[i].sel) /* pas dans lui-même */
+		return -1;
+	return i;
+}
+
+static void dd_data_offer(void *d, struct wl_data_device *dd, struct wl_data_offer *o)
+{
+	(void)d; (void)dd;
+	wl_data_offer_add_listener(o, &offer_listener, calloc(1, sizeof(struct offer_info)));
+}
+
+static void dd_enter(void *d, struct wl_data_device *dd, uint32_t serial, struct wl_surface *sf, wl_fixed_t x,
+		     wl_fixed_t y, struct wl_data_offer *o)
+{
+	(void)d; (void)dd; (void)sf;
+	if (B.offer && B.offer != o && B.offer != B.drop_offer)
+		offer_free(B.offer);
+	B.offer = o;
+	B.drop_x = wl_fixed_to_double(x);
+	B.drop_y = wl_fixed_to_double(y);
+	struct offer_info *inf = o ? wl_data_offer_get_user_data(o) : NULL;
+	if (o && inf && inf->uri) {
+		wl_data_offer_accept(o, serial, "text/uri-list");
+		if (B.ddm_ver >= 3)
+			wl_data_offer_set_actions(o, DND_COPY | DND_MOVE, DND_MOVE);
+	} else if (o) {
+		wl_data_offer_accept(o, serial, NULL);
+	}
+	B.drop_target = drop_target_at(B.drop_x, B.drop_y);
+	B.dirty = true;
+}
+
+static void dd_leave(void *d, struct wl_data_device *dd)
+{
+	(void)d; (void)dd;
+	if (B.offer && B.offer != B.drop_offer)
+		offer_free(B.offer);
+	B.offer = NULL;
+	B.drop_target = -1;
+	B.dirty = true;
+}
+
+static void dd_motion(void *d, struct wl_data_device *dd, uint32_t t, wl_fixed_t x, wl_fixed_t y)
+{
+	(void)d; (void)dd; (void)t;
+	B.drop_x = wl_fixed_to_double(x);
+	B.drop_y = wl_fixed_to_double(y);
+	int tg = drop_target_at(B.drop_x, B.drop_y);
+	if (tg != B.drop_target) {
+		B.drop_target = tg;
+		B.dirty = true;
+	}
+}
+
+static void dd_drop(void *d, struct wl_data_device *dd)
+{
+	(void)d; (void)dd;
+	struct wl_data_offer *o = B.offer;
+	B.offer = NULL;
+	struct offer_info *inf = o ? wl_data_offer_get_user_data(o) : NULL;
+	int fds[2];
+	if (!o || !inf || !inf->uri || B.drop_fd >= 0 || pipe2(fds, O_CLOEXEC)) {
+		offer_free(o);
+		B.drop_target = -1;
+		return;
+	}
+	/* la liste des fichiers arrive par un tube, lu dans la boucle principale (sans bloquer) */
+	wl_data_offer_receive(o, "text/uri-list", fds[1]);
+	close(fds[1]);
+	fcntl(fds[0], F_SETFL, O_NONBLOCK);
+	B.drop_fd = fds[0];
+	B.drop_offer = o;
+	B.drop_dest = B.drop_target;
+	free(B.drop_buf);
+	B.drop_buf = NULL;
+	B.drop_len = 0;
+	wl_display_flush(B.display);
+}
+
+static void dd_selection(void *d, struct wl_data_device *dd, struct wl_data_offer *o)
+{
+	(void)d; (void)dd;
+	/* presse-papiers : on garde le dernier (pour Coller) */
+	if (B.sel_offer && B.sel_offer != o)
+		offer_free(B.sel_offer);
+	B.sel_offer = o;
+}
+
+static const struct wl_data_device_listener dd_listener = {
+	.data_offer = dd_data_offer, .enter = dd_enter, .leave = dd_leave, .motion = dd_motion,
+	.drop = dd_drop, .selection = dd_selection,
+};
+
+/* « file:///home/moi/Mes%20photos » -> « /home/moi/Mes photos » */
+static bool uri_to_path(const char *uri, char *out, size_t cap)
+{
+	if (strncmp(uri, "file://", 7))
+		return false;
+	const char *s = uri + 7;
+	if (!strncmp(s, "localhost/", 10))
+		s += 9;
+	if (*s != '/')
+		return false;
+	size_t k = 0;
+	for (; *s && k + 1 < cap; s++) {
+		if (*s == '%' && s[1] && s[2]) {
+			char h[3] = { s[1], s[2], 0 };
+			out[k++] = (char)strtol(h, NULL, 16);
+			s += 2;
+		} else {
+			out[k++] = *s;
+		}
+	}
+	out[k] = '\0';
+	return true;
+}
+
+static void cell_at(double x, double y, int *col, int *row)
+{
+	int cols = grid_cols(), rows = grid_rows();
+	*col = (int)((B.width - MARGIN - x) / CELL_W);
+	*row = (int)((y - MARGIN) / CELL_H);
+	if (*col < 0) *col = 0;
+	if (*col >= cols) *col = cols - 1;
+	if (*row < 0) *row = 0;
+	if (*row >= rows) *row = rows - 1;
+}
+
+/* fichiers lâchés sur le bureau (ou sur un de ses dossiers / disques).
+ * mode : 0 = comme sur Mac (déplacé sur le même disque, sinon copié), 1 = copié, 2 = déplacé */
+static void transfer(char *text, double x, double y, int target, int mode);
+static void process_drop(char *text, double x, double y, int target)
+{
+	transfer(text, x, y, target, 0);
+}
+static void paste_files(char *text, bool cut)
+{
+	/* à la 1re case libre (pas de position de souris pour un collage au clavier) */
+	transfer(text, -1, -1, -1, cut ? 2 : 1);
+}
+static void transfer(char *text, double x, double y, int target, int mode)
+{
+	char dest[PATH_MAX];
+	if (target >= 0 && target < B.n)
+		item_path(&B.items[target], dest, sizeof dest);
+	else
+		snprintf(dest, sizeof dest, "%s", B.dir);
+	bool on_desktop = !strcmp(dest, B.dir);
+	struct stat dst_st;
+	if (stat(dest, &dst_st))
+		return;
+
+	/* icônes du bureau lâchées sur le bureau : on les déplace seulement (comme avant) */
+	if (on_desktop && B.dragging_out) {
+		B.px = x;
+		B.py = y;
+		move_commit();
+		B.dirty = true;
+		return;
+	}
+	int col = -1, row = -1;
+	if (x >= 0)
+		cell_at(x, y, &col, &row);
+	FILE *pos = on_desktop && x >= 0 ? fopen(B.posfile, "a") : NULL;
+	for (char *l = strtok(text, "\r\n"); l; l = strtok(NULL, "\r\n")) {
+		char src[PATH_MAX];
+		if (l[0] == '#' || !uri_to_path(l, src, sizeof src))
+			continue;
+		const char *base = strrchr(src, '/');
+		base = base ? base + 1 : src;
+		char srcdir[PATH_MAX];
+		snprintf(srcdir, sizeof srcdir, "%.*s", (int)(base - src - 1), src);
+		if (!strcmp(src, dest) || (!strcmp(srcdir, dest) && mode != 1)) /* déjà là, ou dans lui-même */
+			continue;
+		struct stat st;
+		if (lstat(src, &st))
+			continue;
+		/* nom libre à l'arrivée : « photo.png », sinon « photo 2.png » */
+		char nb[256], ext[32] = "", name[300], to[PATH_MAX];
+		snprintf(nb, sizeof nb, "%s", base);
+		char *dot = S_ISDIR(st.st_mode) ? NULL : strrchr(nb, '.');
+		if (dot && dot != nb && strlen(dot) < sizeof ext) {
+			snprintf(ext, sizeof ext, "%s", dot);
+			*dot = '\0';
+		}
+		unique_in(dest, nb, ext, name, sizeof name);
+		snprintf(to, sizeof to, "%s/%s", dest, name);
+		/* comme sur Mac : déplacé sur le même disque, copié depuis un autre disque */
+		bool move = mode == 2 || (mode == 0 && st.st_dev == dst_st.st_dev);
+		if (move && rename(src, to) == 0) {
+			/* déplacé */
+		} else {
+			char *argv[] = { "cp", "-a", "--", src, to, NULL };
+			pid_t pid = fork();
+			if (pid == 0) {
+				execvp("cp", argv);
+				_exit(127);
+			}
+			if (pid > 0)
+				waitpid(pid, NULL, 0);
+		}
+		if (pos && item_at_cell(col, row, -1) < 0) { /* là où on l'a lâché */
+			fprintf(pos, "%d\t%d\t%s\n", col, row, name);
+			row++;
+		}
+	}
+	if (pos)
+		fclose(pos);
+	load_items();
+}
+
+static void drop_read(void)
+{
+	char buf[4096];
+	for (;;) {
+		ssize_t n = read(B.drop_fd, buf, sizeof buf);
+		if (n > 0) {
+			char *nb = realloc(B.drop_buf, B.drop_len + n + 1);
+			if (!nb)
+				break;
+			B.drop_buf = nb;
+			memcpy(B.drop_buf + B.drop_len, buf, n);
+			B.drop_len += n;
+			B.drop_buf[B.drop_len] = '\0';
+			continue;
+		}
+		if (n < 0 && (errno == EAGAIN || errno == EINTR))
+			return; /* la suite plus tard */
+		break;      /* fin (ou erreur) : on traite */
+	}
+	close(B.drop_fd);
+	B.drop_fd = -1;
+	if (B.drop_buf)
+		process_drop(B.drop_buf, B.drop_x, B.drop_y, B.drop_dest);
+	struct offer_info *inf = B.drop_offer ? wl_data_offer_get_user_data(B.drop_offer) : NULL;
+	if (B.drop_offer && B.ddm_ver >= 3 && inf && inf->action)
+		wl_data_offer_finish(B.drop_offer);
+	offer_free(B.drop_offer);
+	B.drop_offer = NULL;
+	B.drop_target = -1;
+	free(B.drop_buf);
+	B.drop_buf = NULL;
+	B.drop_len = 0;
+	B.dirty = true;
+}
+
+/* --- presse-papiers : Copier / Couper (bureau -> Fichiers) et Coller (Fichiers -> bureau) --- */
+
+static void clip_send(void *d, struct wl_data_source *s, const char *mime, int32_t fd)
+{
+	(void)d; (void)s;
+	const char *t = B.clip_text;
+	if (strcmp(mime, "x-special/gnome-copied-files")) { /* text/uri-list : sans la 1re ligne copy/cut */
+		const char *nl = strchr(t, '\n');
+		t = nl ? nl + 1 : t;
+	}
+	size_t len = strlen(t), off = 0;
+	while (off < len) {
+		ssize_t w = write(fd, t + off, len - off);
+		if (w <= 0)
+			break;
+		off += w;
+	}
+	close(fd);
+}
+static void clip_cancelled(void *d, struct wl_data_source *s)
+{
+	(void)d;
+	wl_data_source_destroy(s); /* une autre appli a pris le presse-papiers */
+	if (B.clip == s)
+		B.clip = NULL;
+}
+static const struct wl_data_source_listener clip_listener = {
+	.target = src_target_noop, .send = clip_send, .cancelled = clip_cancelled,
+};
+
+static void clip_set(bool cut)
+{
+	if (!B.ddm || !B.dd)
+		return;
+	size_t k = snprintf(B.clip_text, sizeof B.clip_text, "%s\n", cut ? "cut" : "copy");
+	int n = 0;
+	for (int i = 0; i < B.n; i++) {
+		if (!B.items[i].sel || B.items[i].kind == K_DISK)
+			continue;
+		char p[PATH_MAX], enc[PATH_MAX * 3];
+		item_path(&B.items[i], p, sizeof p);
+		url_encode(p, enc, sizeof enc);
+		if (k + strlen(enc) + 12 >= sizeof B.clip_text)
+			break;
+		k += snprintf(B.clip_text + k, sizeof B.clip_text - k, "file://%s\n", enc);
+		n++;
+	}
+	if (!n)
+		return;
+	if (B.clip)
+		wl_data_source_destroy(B.clip);
+	B.clip = wl_data_device_manager_create_data_source(B.ddm);
+	wl_data_source_add_listener(B.clip, &clip_listener, NULL);
+	wl_data_source_offer(B.clip, "x-special/gnome-copied-files");
+	wl_data_source_offer(B.clip, "text/uri-list");
+	wl_data_device_set_selection(B.dd, B.clip, B.input_serial);
+}
+
+static void paste_start(void)
+{
+	struct offer_info *inf = B.sel_offer ? wl_data_offer_get_user_data(B.sel_offer) : NULL;
+	int fds[2];
+	if (!inf || (!inf->gnome && !inf->uri) || B.paste_fd >= 0 || pipe2(fds, O_CLOEXEC))
+		return;
+	B.paste_gnome = inf->gnome;
+	wl_data_offer_receive(B.sel_offer, inf->gnome ? "x-special/gnome-copied-files" : "text/uri-list", fds[1]);
+	close(fds[1]);
+	fcntl(fds[0], F_SETFL, O_NONBLOCK);
+	B.paste_fd = fds[0];
+	free(B.paste_buf);
+	B.paste_buf = NULL;
+	B.paste_len = 0;
+	wl_display_flush(B.display);
+}
+
+/* collé sur le bureau : copié (ou déplacé si on avait fait « Couper ») */
+static void paste_read(void)
+{
+	char buf[4096];
+	for (;;) {
+		ssize_t n = read(B.paste_fd, buf, sizeof buf);
+		if (n > 0) {
+			char *nb = realloc(B.paste_buf, B.paste_len + n + 1);
+			if (!nb)
+				break;
+			B.paste_buf = nb;
+			memcpy(B.paste_buf + B.paste_len, buf, n);
+			B.paste_len += n;
+			B.paste_buf[B.paste_len] = '\0';
+			continue;
+		}
+		if (n < 0 && (errno == EAGAIN || errno == EINTR))
+			return;
+		break;
+	}
+	close(B.paste_fd);
+	B.paste_fd = -1;
+	char *t = B.paste_buf;
+	bool cut = false;
+	if (t && B.paste_gnome) { /* « copy » ou « cut » sur la 1re ligne */
+		cut = !strncmp(t, "cut", 3);
+		char *nl = strchr(t, '\n');
+		t = nl ? nl + 1 : t + strlen(t);
+	}
+	if (t && *t) {
+		bool was = B.dragging_out;
+		B.dragging_out = false;
+		paste_files(t, cut);
+		B.dragging_out = was;
+	}
+	free(B.paste_buf);
+	B.paste_buf = NULL;
+}
+
+/* --- glisser depuis le bureau vers une autre appli --- */
+
+static void drag_end(void)
+{
+	if (B.src)
+		wl_data_source_destroy(B.src);
+	B.src = NULL;
+	B.dragging_out = false;
+	if (B.drag_icon)
+		wl_surface_destroy(B.drag_icon);
+	B.drag_icon = NULL;
+	B.dirty = true;
+}
+
+static void src_target(void *d, struct wl_data_source *s, const char *m) { (void)d; (void)s; (void)m; }
+static void src_send(void *d, struct wl_data_source *s, const char *mime, int32_t fd)
+{
+	(void)d; (void)s;
+	bool uri = !strcmp(mime, "text/uri-list");
+	for (int i = 0; i < B.n; i++) {
+		if (!B.items[i].sel)
+			continue;
+		char p[PATH_MAX], enc[PATH_MAX * 3], line[PATH_MAX * 3 + 16];
+		item_path(&B.items[i], p, sizeof p);
+		if (uri) {
+			url_encode(p, enc, sizeof enc);
+			snprintf(line, sizeof line, "file://%s\r\n", enc);
+		} else {
+			snprintf(line, sizeof line, "%s\n", p);
+		}
+		size_t len = strlen(line), off = 0;
+		while (off < len) {
+			ssize_t w = write(fd, line + off, len - off);
+			if (w <= 0)
+				break;
+			off += w;
+		}
+	}
+	close(fd);
+}
+static void src_cancelled(void *d, struct wl_data_source *s) { (void)d; (void)s; drag_end(); }
+static void src_dropped(void *d, struct wl_data_source *s) { (void)d; (void)s; }
+static void src_finished(void *d, struct wl_data_source *s)
+{
+	(void)d; (void)s;
+	drag_end();
+	B.ino_reload = true; /* l'autre appli a peut-être déplacé les fichiers */
+}
+static void src_action(void *d, struct wl_data_source *s, uint32_t a) { (void)d; (void)s; (void)a; }
+static const struct wl_data_source_listener src_listener = {
+	.target = src_target, .send = src_send, .cancelled = src_cancelled,
+	.dnd_drop_performed = src_dropped, .dnd_finished = src_finished, .action = src_action,
+};
+
+/* image qui suit la souris pendant le glisser : l'icône, et le nombre de fichiers s'il y en a plusieurs */
+static void make_drag_icon(int idx)
+{
+	const int S = 84;
+	struct buffer *b = &B.drag_buf;
+	if (b->wl) {
+		cairo_surface_destroy(b->cs);
+		wl_buffer_destroy(b->wl);
+		munmap(b->data, b->size);
+		memset(b, 0, sizeof *b);
+	}
+	int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, S);
+	size_t size = (size_t)stride * S;
+	int fd = memfd_create("plume-glisser", MFD_CLOEXEC);
+	if (fd < 0 || ftruncate(fd, size) < 0) {
+		if (fd >= 0) close(fd);
+		return;
+	}
+	void *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (data == MAP_FAILED) {
+		close(fd);
+		return;
+	}
+	struct wl_shm_pool *pool = wl_shm_create_pool(B.shm, fd, size);
+	b->wl = wl_shm_pool_create_buffer(pool, 0, S, S, stride, WL_SHM_FORMAT_ARGB8888);
+	wl_shm_pool_destroy(pool);
+	close(fd);
+	b->data = data;
+	b->size = size;
+	b->w = b->h = S;
+	b->cs = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_ARGB32, S, S, stride);
+	cairo_t *cr = cairo_create(b->cs);
+	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+	cairo_paint(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+	cairo_push_group(cr);
+	struct item *it = &B.items[idx];
+	cairo_surface_t *img = (it->kind == K_IMAGE || it->kind == K_APP) ? item_image(it) : NULL;
+	double ix = (S - ICON) / 2.0, iy = 12;
+	if (it->kind == K_DIR)
+		draw_folder(cr, ix, iy, ICON);
+	else if (img) {
+		cairo_save(cr);
+		cairo_translate(cr, ix, iy);
+		cairo_scale(cr, (double)ICON / cairo_image_surface_get_width(img), (double)ICON / cairo_image_surface_get_width(img));
+		cairo_set_source_surface(cr, img, 0, 0);
+		cairo_paint(cr);
+		cairo_restore(cr);
+	} else
+		draw_document(cr, ix, iy, ICON, it->kind == K_APP ? "" : it->ext);
+	cairo_pop_group_to_source(cr);
+	cairo_paint_with_alpha(cr, 0.85);
+	int k = nsel();
+	if (k > 1) { /* pastille rouge avec le nombre, comme sur Mac */
+		char t[8];
+		snprintf(t, sizeof t, "%d", k);
+		cairo_arc(cr, S - 14, 14, 11, 0, 2 * M_PI);
+		cairo_set_source_rgb(cr, 0.93, 0.27, 0.27);
+		cairo_fill(cr);
+		PangoLayout *l = pango_cairo_create_layout(cr);
+		PangoFontDescription *fdsc = pango_font_description_from_string("DejaVu Sans Bold");
+		pango_font_description_set_absolute_size(fdsc, 11 * PANGO_SCALE);
+		pango_layout_set_font_description(l, fdsc);
+		pango_font_description_free(fdsc);
+		pango_layout_set_text(l, t, -1);
+		int tw, th;
+		pango_layout_get_pixel_size(l, &tw, &th);
+		cairo_move_to(cr, S - 14 - tw / 2.0, 14 - th / 2.0);
+		cairo_set_source_rgb(cr, 1, 1, 1);
+		pango_cairo_show_layout(cr, l);
+		g_object_unref(l);
+	}
+	cairo_destroy(cr);
+	cairo_surface_flush(b->cs);
+	B.drag_icon = wl_compositor_create_surface(B.compositor);
+	wl_surface_attach(B.drag_icon, b->wl, -S / 2, -S / 2);
+	wl_surface_damage(B.drag_icon, 0, 0, S, S);
+}
+
+static void start_drag_out(int idx)
+{
+	B.src = wl_data_device_manager_create_data_source(B.ddm);
+	wl_data_source_add_listener(B.src, &src_listener, NULL);
+	wl_data_source_offer(B.src, "text/uri-list");
+	wl_data_source_offer(B.src, "text/plain;charset=utf-8");
+	wl_data_source_offer(B.src, "text/plain");
+	if (B.ddm_ver >= 3)
+		wl_data_source_set_actions(B.src, DND_COPY | DND_MOVE);
+	make_drag_icon(idx);
+	wl_data_device_start_drag(B.dd, B.src, B.surface, B.drag_icon, B.press_serial);
+	if (B.drag_icon)
+		wl_surface_commit(B.drag_icon);
+	B.dragging_out = true;
+}
+
 /* ------------------------------ souris ------------------------------- */
 
 static struct wl_cursor_theme *cursor_theme;
@@ -1324,8 +2054,18 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl
 	B.px = wl_fixed_to_double(x);
 	B.py = wl_fixed_to_double(y);
 	bool far = hypot(B.px - B.ax, B.py - B.ay) > 5;
-	if (B.drag == D_PRESS_ICON && far && B.drag_button == BTN_LEFT)
-		B.drag = D_MOVE;
+	if (B.drag == D_PRESS_ICON && far && B.drag_button == BTN_LEFT) {
+		bool disk = false;
+		for (int i = 0; i < B.n; i++)
+			disk |= B.items[i].sel && B.items[i].kind == K_DISK;
+		if (B.dd && !disk && B.press_item >= 0) {
+			/* vrai glisser-déposer : vers Fichiers, une appli, un dossier… ou ailleurs sur le bureau */
+			start_drag_out(B.press_item);
+			B.drag = D_NONE;
+		} else {
+			B.drag = D_MOVE; /* disques : seulement déplacés sur le bureau */
+		}
+	}
 	else if (B.drag == D_PRESS_EMPTY && far)
 		B.drag = D_BAND;
 	if (B.drag == D_BAND)
@@ -1345,10 +2085,12 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl
 
 static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t button, uint32_t state)
 {
-	(void)d; (void)p; (void)serial; (void)t;
+	(void)d; (void)p; (void)t;
 	bool down = state == WL_POINTER_BUTTON_STATE_PRESSED;
 	B.dirty = true;
 	if (down) {
+		B.press_serial = serial;
+		B.input_serial = serial;
 		if (B.menu_open) {
 			int i = menu_index_at(B.px, B.py);
 			B.menu_open = false;
@@ -1454,10 +2196,11 @@ static void kb_leave(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surfa
 
 static void kb_key(void *dd, struct wl_keyboard *k, uint32_t serial, uint32_t time, uint32_t key, uint32_t state)
 {
-	(void)dd; (void)k; (void)serial; (void)time;
+	(void)dd; (void)k; (void)time;
 	if (!B.xkb_state || state != WL_KEYBOARD_KEY_STATE_PRESSED)
 		return;
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(B.xkb_state, key + 8);
+	B.input_serial = serial;
 	B.dirty = true;
 	if (B.rename_idx >= 0) { /* saisie du nouveau nom */
 		if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter)
@@ -1498,6 +2241,14 @@ static void kb_key(void *dd, struct wl_keyboard *k, uint32_t serial, uint32_t ti
 		do_action(A_OPEN);
 	} else if (sym == XKB_KEY_F2) {
 		do_action(A_RENAME);
+	} else if (sym == XKB_KEY_space) {
+		preview_toggle();
+	} else if (B.ctrl && (sym == XKB_KEY_c || sym == XKB_KEY_C)) {
+		clip_set(false);
+	} else if (B.ctrl && (sym == XKB_KEY_x || sym == XKB_KEY_X)) {
+		clip_set(true);
+	} else if (B.ctrl && (sym == XKB_KEY_v || sym == XKB_KEY_V)) {
+		paste_start();
 	} else if (B.ctrl && (sym == XKB_KEY_a || sym == XKB_KEY_A)) {
 		for (int i = 0; i < B.n; i++)
 			B.items[i].sel = true;
@@ -1574,6 +2325,9 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t name, const char
 	else if (!strcmp(iface, wl_seat_interface.name) && !B.seat) {
 		B.seat = wl_registry_bind(r, name, &wl_seat_interface, minv(ver, 4));
 		wl_seat_add_listener(B.seat, &seat_listener, NULL);
+	} else if (!strcmp(iface, wl_data_device_manager_interface.name)) {
+		B.ddm_ver = minv(ver, 3);
+		B.ddm = wl_registry_bind(r, name, &wl_data_device_manager_interface, B.ddm_ver);
 	} else if (!strcmp(iface, zwlr_layer_shell_v1_interface.name)) {
 		B.layer_ver = minv(ver, 4);
 		B.layer_shell = wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface, B.layer_ver);
@@ -1624,6 +2378,14 @@ int main(int argc, char **argv)
 		zwlr_layer_surface_v1_set_keyboard_interactivity(B.layer, 2 /* on_demand */);
 	wl_surface_commit(B.surface);
 
+	/* glisser-déposer avec les autres applis */
+	if (B.ddm && B.seat) {
+		B.dd = wl_data_device_manager_get_data_device(B.ddm, B.seat);
+		wl_data_device_add_listener(B.dd, &dd_listener, NULL);
+	}
+	/* clés USB : le noyau signale chaque montage / démontage sur /proc/self/mounts */
+	B.mounts_fd = open("/proc/self/mounts", O_RDONLY | O_CLOEXEC);
+
 	B.ino = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
 	if (B.ino >= 0)
 		inotify_add_watch(B.ino, B.dir, IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_CLOSE_WRITE |
@@ -1637,12 +2399,17 @@ int main(int argc, char **argv)
 		while (wl_display_prepare_read(B.display) != 0)
 			wl_display_dispatch_pending(B.display);
 		wl_display_flush(B.display);
-		struct pollfd fds[2] = { { .fd = wl_display_get_fd(B.display), .events = POLLIN },
-					 { .fd = B.ino, .events = POLLIN } };
+		struct pollfd fds[5] = { { .fd = wl_display_get_fd(B.display), .events = POLLIN },
+					 { .fd = B.ino, .events = POLLIN },
+					 { .fd = B.drop_fd, .events = POLLIN },
+					 { .fd = B.mounts_fd, .events = POLLPRI },
+					 { .fd = B.paste_fd, .events = POLLIN } };
 		int timeout = reload_at > 0 ? 150 : -1;
 		if (B.dirty && !B.frame_cb)
 			timeout = 0;
-		if (poll(fds, B.ino >= 0 ? 2 : 1, timeout) < 0) {
+		while (waitpid(-1, NULL, WNOHANG) > 0) /* aperçus rapides refermés */
+			;
+		if (poll(fds, 5, timeout) < 0) {
 			wl_display_cancel_read(B.display);
 			if (errno == EINTR)
 				continue;
@@ -1663,6 +2430,21 @@ int main(int argc, char **argv)
 			while (read(B.ino, buf, sizeof buf) > 0)
 				;
 			reload_at = now_s() + 0.15; /* plusieurs changements d'un coup : une seule relecture */
+		}
+		if (B.drop_fd >= 0 && (fds[2].revents & (POLLIN | POLLHUP | POLLERR)))
+			drop_read();
+		if (B.paste_fd >= 0 && (fds[4].revents & (POLLIN | POLLHUP | POLLERR)))
+			paste_read();
+		if (B.mounts_fd >= 0 && (fds[3].revents & (POLLPRI | POLLERR))) {
+			char buf[4096];
+			lseek(B.mounts_fd, 0, SEEK_SET);
+			while (read(B.mounts_fd, buf, sizeof buf) > 0)
+				;
+			reload_at = now_s() + 0.4; /* clé USB branchée ou retirée */
+		}
+		if (B.ino_reload) {
+			B.ino_reload = false;
+			reload_at = now_s() + 0.3;
 		}
 		if (reload_at > 0 && now_s() >= reload_at && B.drag == D_NONE && B.rename_idx < 0) {
 			reload_at = 0;

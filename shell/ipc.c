@@ -126,11 +126,20 @@ static void add_running(const char *id)
 	snprintf(S.running[S.nrunning++], sizeof S.running[0], "%s", id);
 }
 
+#ifdef PLUME_VOID
+static bool in_scratch; /* on parcourt le scratchpad : les fenêtres réduites */
+#endif
+
 static void walk(struct json *n)
 {
 	if (!n)
 		return;
 	const char *type = json_str(n, "type");
+#ifdef PLUME_VOID
+	bool was = in_scratch;
+	if (!strcmp(type, "workspace") && !strcmp(json_str(n, "name"), "__i3_scratch"))
+		in_scratch = true;
+#endif
 	if (!strcmp(type, "con") || !strcmp(type, "floating_con")) {
 		const char *id = json_str(n, "app_id");
 		if (!*id) {
@@ -139,6 +148,14 @@ static void walk(struct json *n)
 		}
 		if (*id || json_get(n, "pid")) {
 			add_running(id);
+#ifdef PLUME_VOID
+			if (in_scratch && S.nmini < (int)(sizeof S.mini / sizeof S.mini[0])) {
+				S.mini[S.nmini].id = (long)json_num(n, "id");
+				snprintf(S.mini[S.nmini].app_id, sizeof S.mini[0].app_id, "%s", id);
+				snprintf(S.mini[S.nmini].title, sizeof S.mini[0].title, "%s", json_str(n, "name"));
+				S.nmini++;
+			}
+#endif
 			if (json_bool(n, "focused")) {
 				snprintf(S.title, sizeof S.title, "%s", json_str(n, "name"));
 				snprintf(S.focused_app, sizeof S.focused_app, "%s", id);
@@ -151,6 +168,9 @@ static void walk(struct json *n)
 	kids = json_get(n, "floating_nodes");
 	for (struct json *c = kids ? kids->child : NULL; c; c = c->next)
 		walk(c);
+#ifdef PLUME_VOID
+	in_scratch = was;
+#endif
 }
 
 void ipc_refresh_tree(void)
@@ -162,6 +182,10 @@ void ipc_refresh_tree(void)
 		return;
 	S.nrunning = 0;
 	S.title[0] = S.focused_app[0] = '\0';
+#ifdef PLUME_VOID
+	S.nmini = 0;
+	in_scratch = false;
+#endif
 	walk(j);
 	json_free(j);
 #ifdef PLUME_VOID

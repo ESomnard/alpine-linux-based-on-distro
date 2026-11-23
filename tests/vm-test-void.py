@@ -173,6 +173,7 @@ dbus-run-session sh -c '
   sway -c /tmp/sway-test.conf >/tmp/sway.log 2>&1 &
   sleep 30
   export SWAYSOCK=$(ls $XDG_RUNTIME_DIR/sway-ipc.*.sock | head -1)
+  export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR | grep -m1 "^wayland-[0-9]*$")
   echo "bureau=$XDG_CURRENT_DESKTOP"
   P="--session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.DBus.Properties.Get"
   gdbus call $P org.freedesktop.portal.ScreenCast version && echo portail-ecran-ok

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #ifdef PLUME_VOID
 #include <librsvg/rsvg.h>
 #endif
@@ -354,39 +355,339 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 /* =============================== DOCK ================================ */
 
 #ifdef PLUME_VOID
-/* logo d'une appli Plume (paquet plume-icones), rendu une fois en 160 px puis gardé */
+/* ---- icônes du dock : logo Plume, sinon l'icône de l'appli (thème Papirus, hicolor…) ---- */
 #define ICON_PX 160
-static cairo_surface_t *plume_icon(const char *app_id)
+
+static cairo_surface_t *load_icon(const char *path)
 {
-	static struct { char id[64]; cairo_surface_t *s; bool tried; } cache[MAX_APPS * 2];
-	static int n;
-	if (!app_id[0])
-		return NULL;
-	for (int i = 0; i < n; i++)
-		if (!strcmp(cache[i].id, app_id))
-			return cache[i].s;
-	if (n >= (int)(sizeof cache / sizeof cache[0]))
-		return NULL;
-	snprintf(cache[n].id, sizeof cache[0].id, "%s", app_id);
-	cache[n].s = NULL;
-	char path[256];
-	snprintf(path, sizeof path, "/usr/share/icons/hicolor/scalable/apps/%s.svg", app_id);
-	RsvgHandle *h = rsvg_handle_new_from_file(path, NULL);
-	if (h) {
-		cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, ICON_PX, ICON_PX);
+	size_t n = strlen(path);
+	cairo_surface_t *s = NULL;
+	if (n > 4 && !strcmp(path + n - 4, ".svg")) {
+		RsvgHandle *h = rsvg_handle_new_from_file(path, NULL);
+		if (!h)
+			return NULL;
+		s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, ICON_PX, ICON_PX);
 		cairo_t *c = cairo_create(s);
 		RsvgRectangle vp = { 0, 0, ICON_PX, ICON_PX };
-		if (rsvg_handle_render_document(h, c, &vp, NULL))
-			cache[n].s = s;
-		else
-			cairo_surface_destroy(s);
+		bool ok = rsvg_handle_render_document(h, c, &vp, NULL);
 		cairo_destroy(c);
 		g_object_unref(h);
+		if (!ok) {
+			cairo_surface_destroy(s);
+			s = NULL;
+		}
+	} else if (n > 4 && !strcmp(path + n - 4, ".png")) {
+		cairo_surface_t *src = cairo_image_surface_create_from_png(path);
+		if (cairo_surface_status(src) == CAIRO_STATUS_SUCCESS) {
+			int w = cairo_image_surface_get_width(src), hh = cairo_image_surface_get_height(src);
+			s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, ICON_PX, ICON_PX);
+			cairo_t *c = cairo_create(s);
+			double k = (double)ICON_PX / (w > hh ? w : hh);
+			cairo_translate(c, (ICON_PX - w * k) / 2, (ICON_PX - hh * k) / 2);
+			cairo_scale(c, k, k);
+			cairo_set_source_surface(c, src, 0, 0);
+			cairo_pattern_set_filter(cairo_get_source(c), CAIRO_FILTER_GOOD);
+			cairo_paint(c);
+			cairo_destroy(c);
+		}
+		cairo_surface_destroy(src);
 	}
+	return s;
+}
+
+static bool find_theme_icon(const char *name, char *out, size_t cap)
+{
+	if (!name[0])
+		return false;
+	if (name[0] == '/') {
+		snprintf(out, cap, "%s", name);
+		return access(out, R_OK) == 0;
+	}
+	static const char *dirs[] = {
+		"/usr/share/icons/Papirus/64x64/apps", "/usr/share/icons/Papirus/48x48/apps",
+		"/usr/share/icons/hicolor/scalable/apps", "/usr/share/icons/hicolor/256x256/apps",
+		"/usr/share/icons/hicolor/128x128/apps", "/usr/share/icons/hicolor/64x64/apps",
+		"/usr/share/icons/hicolor/48x48/apps", "/usr/share/icons/Adwaita/scalable/apps",
+		"/var/lib/flatpak/exports/share/icons/hicolor/scalable/apps",
+		"/var/lib/flatpak/exports/share/icons/hicolor/128x128/apps", "/usr/share/pixmaps", NULL,
+	};
+	static const char *ext[] = { ".svg", ".png" };
+	for (int d = 0; dirs[d]; d++)
+		for (int e = 0; e < 2; e++) {
+			snprintf(out, cap, "%s/%s%s", dirs[d], name, ext[e]);
+			if (access(out, R_OK) == 0)
+				return true;
+		}
+	return false;
+}
+
+/* *plume : logo de la famille Plume (carré arrondi avec une marge de 8 sur 128) */
+static cairo_surface_t *app_icon(const struct app *a, bool *plume)
+{
+	static struct { char id[64]; cairo_surface_t *s; bool plume; } cache[MAX_APPS * 3];
+	static int n;
+	const char *key = a->app_id;
+	*plume = false;
+	if (!key[0] || a->power)
+		return NULL;
+	for (int i = 0; i < n; i++)
+		if (!strcmp(cache[i].id, key)) {
+			*plume = cache[i].plume;
+			return cache[i].s;
+		}
+	if (n >= (int)(sizeof cache / sizeof cache[0]))
+		return NULL;
+	snprintf(cache[n].id, sizeof cache[0].id, "%s", key);
+	char name[96], path[512];
+	if (!strcmp(key, "@corbeille"))
+		snprintf(name, sizeof name, "plume-corbeille");
+	else if (!strcmp(key, "@corbeille-pleine"))
+		snprintf(name, sizeof name, "plume-corbeille-pleine");
+	else
+		snprintf(name, sizeof name, "%s", key);
+	snprintf(path, sizeof path, "/usr/share/icons/hicolor/scalable/apps/%s.svg", name);
+	if (!strncmp(name, "plume-", 6) && access(path, R_OK) == 0) {
+		cache[n].plume = true;
+	} else {
+		char lbl[48], cmd[256], ic[96] = "";
+		desktop_info(key, lbl, cmd, ic);
+		if (!find_theme_icon(ic[0] ? ic : key, path, sizeof path))
+			path[0] = '\0';
+	}
+	cache[n].s = path[0] ? load_icon(path) : NULL;
+	*plume = cache[n].plume;
 	return cache[n++].s;
+}
+
+/* rebond pendant le lancement (comme sur Mac) : jusqu'à 3 s, ou dès que l'appli est ouverte */
+static double bounce_off(struct app *a)
+{
+	if (a->bounce_t <= 0)
+		return 0;
+	double t = now_s() - a->bounce_t;
+	if (t > 3.0 || app_is_running(a)) {
+		a->bounce_t = 0;
+		return 0;
+	}
+	return fabs(sin(t * M_PI * 2.2)) * 16 * (1 - t / 6);
+}
+
+/* ======================= DOCK (Plume Void, façon Mac) ======================= */
+
+/* sans loupe : position du centre de chaque case (la loupe se règle sur ces positions fixes) */
+static void dock_base(int W, double *cx, double *base_w)
+{
+	int seps = 0;
+	for (int i = 0; i < S.napps; i++)
+		seps += S.apps[i].separator_before;
+	double bw = S.napps * DOCK_TILE + (S.napps - 1) * DOCK_GAP + seps * (DOCK_GAP + 1) + 2 * DOCK_PAD;
+	double x = (W - bw) / 2.0 + DOCK_PAD;
+	for (int i = 0; i < S.napps; i++) {
+		if (S.apps[i].separator_before)
+			x += DOCK_GAP + 1;
+		cx[i] = x + DOCK_TILE / 2.0;
+		x += DOCK_TILE + DOCK_GAP;
+	}
+	*base_w = bw;
+}
+
+void dock_layout(struct output *o, int W, int H, double *panel_x, double *panel_w)
+{
+	double cx[MAX_APPS], base_w, sc[MAX_APPS], extra = 0;
+	dock_base(W, cx, &base_w);
+	for (int i = 0; i < S.napps; i++) {
+		double s = 1;
+		if (S.mag > 0 && S.mag_out == o && S.drag_app < 0) { /* loupe en vague autour de la souris */
+			double d = (S.mag_x - cx[i]) / (DOCK_TILE * 1.3);
+			s = 1 + DOCK_MAG * S.mag * exp(-d * d);
+		}
+		sc[i] = s;
+		extra += DOCK_TILE * (s - 1);
+	}
+	/* comme sur Mac : le point sous la souris ne bouge pas, les voisines s'écartent de chaque côté */
+	double shift = 0;
+	if (S.mag > 0 && S.mag_out == o && S.drag_app < 0)
+		for (int i = 0; i < S.napps; i++) {
+			double cov = (S.mag_x - (cx[i] - DOCK_TILE / 2.0)) / DOCK_TILE;
+			shift += DOCK_TILE * (sc[i] - 1) * (cov < 0 ? 0 : cov > 1 ? 1 : cov);
+		}
+	double pw = base_w + extra, px = (W - base_w) / 2.0 - shift;
+	double py = H - DOCK_MARGIN - DOCK_PANEL_H;
+	o->dock_panel = (struct rect){ px, py, pw, DOCK_PANEL_H };
+	double x = px + DOCK_PAD;
+	for (int i = 0; i < S.napps; i++) {
+		if (S.apps[i].separator_before)
+			x += DOCK_GAP + 1;
+		double w = DOCK_TILE * sc[i];
+		o->hit_app[i] = (struct rect){ x, py + DOCK_PAD + DOCK_TILE - w, w, w }; /* grandit vers le haut */
+		x += w + DOCK_GAP;
+	}
+	if (panel_x) *panel_x = px;
+	if (panel_w) *panel_w = pw;
+}
+
+/* une icône : logo, icône du thème, ou lettre dans une case (secours) */
+static void dock_icon(cairo_t *cr, struct app *a, double tx, double ty, double tw, double hv, bool run, double alpha)
+{
+	bool plume;
+	cairo_surface_t *ic = app_icon(a, &plume);
+	cairo_push_group(cr);
+	if (ic) {
+		double full = plume ? tw * 128.0 / 112.0 : tw, off = plume ? tw * 8.0 / 112.0 : 0;
+		cairo_save(cr);
+		cairo_translate(cr, tx - off, ty - off);
+		cairo_scale(cr, full / ICON_PX, full / ICON_PX);
+		cairo_set_source_surface(cr, ic, 0, 0);
+		cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+		cairo_paint(cr);
+		cairo_restore(cr);
+	} else {
+		double sc = tw / DOCK_TILE;
+		rrect(cr, tx, ty, tw, tw, 12 * sc);
+		cairo_set_source_rgba(cr, ACC_RGB, 0.05 + 0.10 * hv + (run ? 0.04 : 0));
+		cairo_fill_preserve(cr);
+		rgba(cr, run || hv > 0.3 ? C_LINE : C_LINEDIM, run ? 0.7 : 1);
+		cairo_set_line_width(cr, 1);
+		cairo_stroke(cr);
+		uint32_t gc = hv > 0.5 ? C_BRIGHT : run ? C_TEXT : C_LINE;
+		if (a->power)
+			power_icon(cr, tx + tw / 2, ty + tw / 2, tw * 0.2, hv > 0.5 ? C_ERR : C_MUTED, 1);
+		else {
+			bool ascii = (unsigned char)a->glyph[0] < 0x80;
+			txt(cr, FONT_SYM, (ascii ? 17 : 22) * sc, ascii ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, 0, gc, 1,
+			    tx + tw / 2, ty + tw / 2, 1, 0, a->glyph);
+		}
+	}
+	if (a->mini_con) { /* fenêtre réduite : petite pastille jaune dans le coin */
+		cairo_arc(cr, tx + tw - tw * 0.14, ty + tw - tw * 0.14, tw * 0.13, 0, 2 * M_PI);
+		cairo_set_source_rgb(cr, 0.996, 0.737, 0.18);
+		cairo_fill_preserve(cr);
+		cairo_set_source_rgb(cr, 0.87, 0.63, 0.14);
+		cairo_set_line_width(cr, 1);
+		cairo_stroke(cr);
+	}
+	cairo_pop_group_to_source(cr);
+	cairo_paint_with_alpha(cr, alpha);
+}
+
+/* où une icône glissée irait (parmi les épinglées) : index de l'appli devant laquelle on l'insère */
+int dock_insert_index(struct output *o)
+{
+	for (int i = 0; i < S.napps; i++) {
+		struct app *a = &S.apps[i];
+		if (a->extra || a->power || a->trash || i == S.drag_app)
+			continue;
+		struct rect t = o->hit_app[i];
+		if (S.px < t.x + t.w / 2)
+			return i;
+	}
+	return -1; /* à la fin des épinglées */
+}
+
+void draw_dock(struct output *o, cairo_t *cr, int W, int H)
+{
+	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+	cairo_paint(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+	double px, pw;
+	dock_layout(o, W, H, &px, &pw);
+	o->panel_w_drawn = pw;
+	struct rect p = o->dock_panel;
+
+	/* panneau HUD */
+	rrect(cr, p.x, p.y, p.w, p.h, 18);
+	cairo_pattern_t *g = cairo_pattern_create_linear(0, p.y, 0, p.y + p.h);
+	cairo_pattern_add_color_stop_rgba(g, 0, 8 / 255.0, 20 / 255.0, 30 / 255.0, 0.78);
+	cairo_pattern_add_color_stop_rgba(g, 1, 3 / 255.0, 8 / 255.0, 14 / 255.0, 0.94);
+	cairo_set_source(cr, g);
+	cairo_fill_preserve(cr);
+	cairo_pattern_destroy(g);
+	glow_stroke(cr, C_LINE, 1.5, 0.9);
+	bracket(cr, p.x + 5, p.y + 5, 1, 1, 18);
+	bracket(cr, p.x + p.w - 5, p.y + p.h - 5, -1, -1, 18);
+
+	bool dragging = S.drag_app >= 0 && S.drag_outp == o;
+	int ins = dragging && !S.drag_out ? dock_insert_index(o) : -2;
+	for (int i = 0; i < S.napps; i++) {
+		struct app *a = &S.apps[i];
+		struct rect t = o->hit_app[i];
+		if (a->separator_before) {
+			rgba(cr, C_LINEDIM, 1);
+			cairo_rectangle(cr, t.x - DOCK_GAP - 1, p.y + DOCK_PAD + 6, 1, DOCK_TILE - 12);
+			cairo_fill(cr);
+		}
+		if (ins == i || (ins == -1 && i > 0 && !S.apps[i - 1].extra && !S.apps[i - 1].trash && !S.apps[i - 1].power &&
+				 (a->extra || a->trash || a->power))) {
+			/* là où l'icône glissée va se placer */
+			rgba(cr, C_LINE, 1);
+			cairo_rectangle(cr, t.x - DOCK_GAP / 2.0 - 1, p.y + DOCK_PAD, 2, DOCK_TILE);
+			cairo_fill(cr);
+		}
+		if (dragging && i == S.drag_app)
+			continue; /* dessinée sous la souris, plus bas */
+		double hv = a->hover;
+		double tw = t.w, tx = t.x, ty = t.y - bounce_off(a);
+		bool run = app_is_running(a);
+		if (i == S.drop_app) { /* un fichier glissé au-dessus : l'appli s'éclaire */
+			rrect(cr, tx - 4, ty - 4, tw + 8, tw + 8, 14);
+			cairo_set_source_rgba(cr, ACC_RGB, 0.30);
+			cairo_fill_preserve(cr);
+			glow_stroke(cr, C_LINE, 1.5, 1);
+		}
+		dock_icon(cr, a, tx, ty, tw, hv, run, 1);
+		/* point « ouvert » */
+		if (run) {
+			bool foc = S.focused_app[0] && !strcasecmp(S.focused_app, a->app_id);
+			double dx = t.x + t.w / 2.0, dy = p.y + p.h - 7;
+			cairo_arc(cr, dx, dy, foc ? 5 : 4, 0, 2 * M_PI);
+			rgba(cr, foc ? C_OK : C_LINE, 0.25);
+			cairo_fill(cr);
+			cairo_arc(cr, dx, dy, foc ? 2.5 : 2, 0, 2 * M_PI);
+			rgba(cr, foc ? C_OK : C_LINE, 1);
+			cairo_fill(cr);
+		}
+	}
+	/* l'icône qu'on glisse suit la souris ; tirée hors du dock, elle va disparaître */
+	if (dragging && S.drag_app < S.napps) {
+		struct app *a = &S.apps[S.drag_app];
+		double tw = DOCK_TILE * 1.1;
+		dock_icon(cr, a, S.px - tw / 2, S.py - tw / 2, tw, 1, false, S.drag_out ? 0.45 : 0.9);
+		if (S.drag_out)
+			txt(cr, FONT, 12, PANGO_WEIGHT_SEMIBOLD, 0.06, C_BRIGHT, 1, S.px, S.py - tw / 2 - 12, 1, 0,
+			    "Retirer du Dock");
+	}
+
+	if (M.open && M.out == o) {
+		draw_menu(o, cr, W, H);
+		return; /* pas d'info-bulle sous le menu */
+	}
+	/* info-bulle, au-dessus de l'icône agrandie */
+	if (!dragging && S.hover_app >= 0 && S.hover_app < S.napps && S.apps[S.hover_app].hover > 0.2) {
+		struct app *a = &S.apps[S.hover_app];
+		struct rect t = o->hit_app[S.hover_app];
+		double al = a->hover;
+		double lw = txt_w(cr, FONT, 12, PANGO_WEIGHT_SEMIBOLD, 0.08, a->label);
+		if (lw > 360)
+			lw = 360;
+		double bw = lw + 24, bh = 26, cx = t.x + t.w / 2.0;
+		double bx = cx - bw / 2, by = t.y - 14 - bh;
+		if (bx < 4) bx = 4;
+		if (bx + bw > W - 4) bx = W - 4 - bw;
+		if (by < 2) by = 2;
+		cairo_push_group(cr);
+		rrect(cr, bx, by, bw, bh, 7);
+		cairo_set_source_rgba(cr, 3 / 255.0, 8 / 255.0, 14 / 255.0, 0.96);
+		cairo_fill_preserve(cr);
+		glow_stroke(cr, C_LINE, 1, 0.8);
+		txt(cr, FONT, 12, PANGO_WEIGHT_SEMIBOLD, 0.08, C_BRIGHT, 1, bx + bw / 2, by + bh / 2, 1, 360, a->label);
+		cairo_pop_group_to_source(cr);
+		cairo_paint_with_alpha(cr, al);
+	}
 }
 #endif
 
+#ifndef PLUME_VOID
 void dock_layout(struct output *o, int W, int H, double *panel_x, double *panel_w)
 {
 	int seps = 0;
@@ -528,6 +829,8 @@ void draw_dock(struct output *o, cairo_t *cr, int W, int H)
 		cairo_paint_with_alpha(cr, al);
 	}
 }
+
+#endif /* !PLUME_VOID */
 
 #ifdef PLUME_VOID
 /* ======================= MENU DU CLIC DROIT (Mac) ======================= */

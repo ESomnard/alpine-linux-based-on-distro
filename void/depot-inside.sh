@@ -89,7 +89,7 @@ paquet plume-pastilles-gtk void/pastilles-gtk "Pastilles de fenêtre Plume dans 
 
 # scripts Plume : communs, remplacés par leur version Void quand elle existe
 rm -rf "$D" && mkdir -p "$D/usr/bin"
-for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-notifications plume-linux plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
+for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-notifications plume-corbeille plume-linux plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
 	src=$W/rootfs/etc/plume/conf/$f
 	[ -f "$W/void/rootfs/etc/plume/conf/$f" ] && src=$W/void/rootfs/etc/plume/conf/$f
 	install -m755 "$src" "$D/usr/bin/$f"

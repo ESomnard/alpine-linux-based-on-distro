@@ -185,8 +185,34 @@ static void read_ime(void)
 	pclose(f);
 }
 
+#ifdef PLUME_VOID
+/* corbeille vide ou pleine (icône du dock) */
+static void read_trash(void)
+{
+	const char *home = getenv("HOME");
+	char p[512];
+	snprintf(p, sizeof p, "%s/.local/share/Trash/files", home ? home : "");
+	int n = 0;
+	DIR *d = opendir(p);
+	struct dirent *e;
+	while (d && (e = readdir(d)))
+		if (e->d_name[0] != '.' || (e->d_name[1] && strcmp(e->d_name, "..")))
+			n++;
+	if (d)
+		closedir(d);
+	if ((n > 0) != (S.ntrash > 0)) {
+		S.ntrash = n;
+		dock_compose();
+	}
+	S.ntrash = n;
+}
+#endif
+
 void sys_update(void)
 {
+#ifdef PLUME_VOID
+	read_trash();
+#endif
 	read_cpu();
 	read_ram();
 	read_power();
@@ -309,15 +335,15 @@ void apps_load(void)
 
 /* nom et commande d'une appli d'après son fichier .desktop (même nom que l'app_id,
  * ou StartupWMClass=app_id) ; gardés en mémoire */
-static struct { char id[64], name[48], cmd[256]; } cache[48];
+static struct { char id[64], name[48], cmd[256], icon[96]; } cache[64];
 static int ncache;
 
-static bool desktop_read(const char *path, const char *id, bool by_class, char *name, char *cmd)
+static bool desktop_read(const char *path, const char *id, bool by_class, char *name, char *cmd, char *icon)
 {
 	FILE *f = fopen(path, "r");
 	if (!f)
 		return false;
-	char l[1024], nm[48] = "", ex[256] = "";
+	char l[1024], nm[48] = "", ex[256] = "", ic[96] = "";
 	bool cls = !by_class, in_entry = false;
 	while (fgets(l, sizeof l, f)) {
 		l[strcspn(l, "\r\n")] = '\0';
@@ -331,6 +357,8 @@ static bool desktop_read(const char *path, const char *id, bool by_class, char *
 			snprintf(nm, sizeof nm, "%s", l + 5);
 		else if (!strncmp(l, "Exec=", 5) && !ex[0])
 			snprintf(ex, sizeof ex, "%s", l + 5);
+		else if (!strncmp(l, "Icon=", 5) && !ic[0])
+			snprintf(ic, sizeof ic, "%s", l + 5);
 		else if (!strncmp(l, "StartupWMClass=", 15) && !strcasecmp(l + 15, id))
 			cls = true;
 	}
@@ -347,15 +375,17 @@ static bool desktop_read(const char *path, const char *id, bool by_class, char *
 		ex[--k] = '\0';
 	snprintf(name, 48, "%s", nm);
 	snprintf(cmd, 256, "%s", ex);
+	snprintf(icon, 96, "%s", ic);
 	return true;
 }
 
-static void desktop_lookup(const char *id, char *name, char *cmd)
+void desktop_info(const char *id, char *name, char *cmd, char *icon)
 {
 	for (int i = 0; i < ncache; i++)
 		if (!strcmp(cache[i].id, id)) {
 			snprintf(name, 48, "%s", cache[i].name);
 			snprintf(cmd, 256, "%s", cache[i].cmd);
+			snprintf(icon, 96, "%s", cache[i].icon);
 			return;
 		}
 	const char *home = getenv("HOME");
@@ -369,7 +399,7 @@ static void desktop_lookup(const char *id, char *name, char *cmd)
 	for (int d = 0; d < 4 && !found; d++) {
 		char p[700];
 		snprintf(p, sizeof p, "%s/%s.desktop", dirs[d], id);
-		found = desktop_read(p, id, false, name, cmd);
+		found = desktop_read(p, id, false, name, cmd, icon);
 	}
 	for (int d = 0; d < 4 && !found; d++) {
 		DIR *dir = opendir(dirs[d]);
@@ -380,7 +410,7 @@ static void desktop_lookup(const char *id, char *name, char *cmd)
 				continue;
 			char p[800];
 			snprintf(p, sizeof p, "%s/%s", dirs[d], e->d_name);
-			found = desktop_read(p, id, true, name, cmd);
+			found = desktop_read(p, id, true, name, cmd, icon);
 		}
 		if (dir)
 			closedir(dir);
@@ -388,13 +418,25 @@ static void desktop_lookup(const char *id, char *name, char *cmd)
 	if (!found) {
 		snprintf(name, 48, "%s", id);
 		cmd[0] = '\0';
+		icon[0] = '\0';
 	}
-	if (ncache < 48) {
+	if (ncache < 64) {
 		snprintf(cache[ncache].id, sizeof cache[0].id, "%s", id);
 		snprintf(cache[ncache].name, sizeof cache[0].name, "%s", name);
 		snprintf(cache[ncache].cmd, sizeof cache[0].cmd, "%s", cmd);
+		snprintf(cache[ncache].icon, sizeof cache[0].icon, "%s", icon);
 		ncache++;
 	}
+}
+
+/* 1re lettre d'un nom, en majuscule (icône de secours) */
+static void glyph_of(const char *label, char *g, size_t cap)
+{
+	unsigned char c = (unsigned char)label[0];
+	if (c < 0x80)
+		snprintf(g, cap, "%c", c >= 'a' && c <= 'z' ? c - 32 : c);
+	else
+		snprintf(g, cap, "%.*s", c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : 2, label);
 }
 
 void dock_compose(void)
@@ -423,18 +465,37 @@ void dock_compose(void)
 		a.separator_before = first;
 		first = false;
 		snprintf(a.app_id, sizeof a.app_id, "%s", id);
-		desktop_lookup(id, a.label, a.cmd);
-		/* glyphe : 1re lettre du nom, en majuscule */
-		unsigned char c = (unsigned char)a.label[0];
-		if (c < 0x80)
-			snprintf(a.glyph, sizeof a.glyph, "%c", c >= 'a' && c <= 'z' ? c - 32 : c);
-		else {
-			int k = c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : 2;
-			snprintf(a.glyph, sizeof a.glyph, "%.*s", k, a.label);
-		}
+		char ic[96];
+		desktop_info(id, a.label, a.cmd, ic);
+		glyph_of(a.label, a.glyph, sizeof a.glyph);
 		nv[n++] = a;
 	}
-	/* 3) ⏻ (et ce qui suit), toujours séparé */
+	/* 3) fenêtres réduites (pastille jaune), comme sur Mac : à droite, avant la corbeille */
+	first = true;
+	for (int m = 0; m < S.nmini && n < MAX_APPS - 2; m++) {
+		struct app a;
+		memset(&a, 0, sizeof a);
+		a.extra = true;
+		a.mini_con = S.mini[m].id;
+		a.separator_before = first;
+		first = false;
+		snprintf(a.app_id, sizeof a.app_id, "%s", S.mini[m].app_id);
+		snprintf(a.label, sizeof a.label, "%s", S.mini[m].title[0] ? S.mini[m].title : S.mini[m].app_id);
+		glyph_of(a.label, a.glyph, sizeof a.glyph);
+		nv[n++] = a;
+	}
+	/* 4) corbeille */
+	if (n < MAX_APPS - 1) {
+		struct app a;
+		memset(&a, 0, sizeof a);
+		a.trash = true;
+		a.separator_before = true;
+		snprintf(a.label, sizeof a.label, "%s", S.ntrash ? "Corbeille" : "Corbeille (vide)");
+		snprintf(a.app_id, sizeof a.app_id, "%s", S.ntrash ? "@corbeille-pleine" : "@corbeille");
+		snprintf(a.cmd, sizeof a.cmd, "plume-corbeille");
+		nv[n++] = a;
+	}
+	/* 5) ⏻ (et ce qui suit), toujours séparé */
 	for (int i = 0; i < S.ncfg && n < MAX_APPS; i++)
 		if (S.cfg[i].power) {
 			nv[n] = S.cfg[i];
@@ -448,8 +509,12 @@ void dock_compose(void)
 				nv[i].hover = S.apps[j].hover;
 				break;
 			}
-		if (same && (strcmp(nv[i].label, S.apps[i].label) || nv[i].separator_before != S.apps[i].separator_before))
+		if (same && (strcmp(nv[i].label, S.apps[i].label) || nv[i].separator_before != S.apps[i].separator_before ||
+			     strcmp(nv[i].app_id, S.apps[i].app_id) || nv[i].mini_con != S.apps[i].mini_con))
 			same = false;
+		for (int j = 0; j < S.napps; j++) /* le rebond continue */
+			if (!strcmp(nv[i].label, S.apps[j].label) && !strcmp(nv[i].app_id, S.apps[j].app_id))
+				nv[i].bounce_t = S.apps[j].bounce_t;
 	}
 	if (same)
 		return;
@@ -463,6 +528,10 @@ bool app_is_running(const struct app *a)
 {
 	if (!a->app_id[0])
 		return false;
+#ifdef PLUME_VOID
+	if (a->trash || a->mini_con)
+		return false;
+#endif
 	for (int i = 0; i < S.nrunning; i++)
 		if (!strcasecmp(S.running[i], a->app_id))
 			return true;

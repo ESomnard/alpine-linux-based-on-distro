@@ -1,0 +1,25 @@
+#!/bin/sh
+# Plume (Void) — la corbeille (au bout du dock).
+#   plume-corbeille            l'ouvrir dans Fichiers
+#   plume-corbeille --vider    la vider (après confirmation)
+set -u
+T="$HOME/.local/share/Trash"
+case "${1:-}" in
+--vider)
+	n=$(ls -A "$T/files" 2>/dev/null | wc -l)
+	if [ "$n" -eq 0 ]; then
+		notify-send -a Plume "Corbeille" "Elle est déjà vide." 2>/dev/null
+		exit 0
+	fi
+	yad --title "Vider la corbeille" --window-icon plume-corbeille --image plume-corbeille-pleine --center --width 440 \
+		--text "<b>Supprimer définitivement les $n élément(s) de la corbeille ?</b>\n\nOn ne pourra plus les récupérer." \
+		--button "Annuler:1" --button "Vider la corbeille:0" >/dev/null 2>&1 || exit 0
+	rm -rf "$T/files" "$T/info" "$T/expunged"
+	mkdir -p "$T/files" "$T/info"
+	notify-send -a Plume "Corbeille vidée" "$n élément(s) supprimé(s)." 2>/dev/null
+	;;
+*)
+	mkdir -p "$T/files" "$T/info"
+	exec pcmanfm trash:///
+	;;
+esac

@@ -113,6 +113,8 @@ static struct buffer *get_buffer(struct surf *s, int w, int h)
 	return NULL;
 }
 
+static void set_dock_input_region(struct surf *s);
+
 static void render(struct surf *s)
 {
 	if (!s->configured || s->width <= 0 || s->height <= 0)
@@ -123,6 +125,10 @@ static void render(struct surf *s)
 		return;
 	cairo_t *cr = cairo_create(b->cs);
 	cairo_scale(cr, sc, sc);
+#ifdef PLUME_VOID
+	if (s->kind == SURF_DOCK) /* largeur du dock changée (loupe, applis) : zone cliquable à jour */
+		set_dock_input_region(s);
+#endif
 	if (s->kind == SURF_BAR)
 		draw_bar(s->out, cr, s->width, s->height);
 	else
@@ -147,6 +153,8 @@ static void set_dock_input_region(struct surf *s)
 #ifdef PLUME_VOID
 	if (M.open && M.out == s->out) /* menu ouvert : tout le dock agrandi reçoit les clics */
 		wl_region_add(r, 0, 0, s->width, s->height);
+	else if (S.mag > 0.01) /* loupe : les icônes agrandies dépassent du dock */
+		wl_region_add(r, (int)p.x, (int)p.y - 34, (int)p.w, (int)p.h + 34);
 	else
 #endif
 	wl_region_add(r, (int)p.x, (int)p.y - 12, (int)p.w, (int)p.h + 12);
@@ -299,6 +307,14 @@ static void update_hover(void)
 		S.hover_app = h;
 		mark_dirty(SURF_DOCK);
 	}
+#ifdef PLUME_VOID
+	/* loupe : suit la souris le long du dock */
+	if (S.ptr_surf && S.ptr_surf->kind == SURF_DOCK && !M.open) {
+		S.mag_x = S.px;
+		S.mag_out = S.ptr_surf->out;
+		mark_dirty(SURF_DOCK);
+	}
+#endif
 }
 
 static struct wl_cursor_theme *cursor_theme;
@@ -344,6 +360,21 @@ static void p_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl
 		if (S.ptr_surf && S.ptr_surf == &M.out->dock)
 			menu_motion(S.px, S.py);
 		return;
+	}
+	/* glisser une icône épinglée : la déplacer dans le dock, ou la tirer dehors pour la retirer */
+	if (S.press_app >= 0 && S.press_app < S.napps && S.ptr_surf && S.ptr_surf->kind == SURF_DOCK) {
+		struct app *a = &S.apps[S.press_app];
+		bool pinned = !a->extra && !a->power && !a->trash && !a->mini_con;
+		if (S.drag_app < 0 && pinned && hypot(S.px - S.press_x, S.py - S.press_y) > 6) {
+			S.drag_app = S.press_app;
+			S.drag_outp = S.ptr_surf->out;
+			S.hover_app = -1;
+		}
+		if (S.drag_app >= 0) {
+			S.drag_out = S.py < S.drag_outp->dock_panel.y - 50;
+			mark_dirty(SURF_DOCK);
+			return;
+		}
 	}
 #endif
 	update_hover();
@@ -409,6 +440,18 @@ static void click_dock(struct output *o, uint32_t button)
 			return;
 		}
 #endif
+#ifdef PLUME_VOID
+		if (button == BTN_LEFT && a->mini_con) { /* fenêtre réduite : elle revient */
+			ipc_command("[con_id=%ld] focus", a->mini_con);
+			return;
+		}
+		if (button == BTN_LEFT && a->trash) {
+			spawn(a->cmd);
+			return;
+		}
+		if (button == BTN_LEFT && !a->power && !app_is_running(a) && a->cmd[0])
+			a->bounce_t = now_s(); /* rebond jusqu'à l'ouverture */
+#endif
 		if (!a->power && button == BTN_LEFT && app_is_running(a)) {
 			/* déjà ouvert : on l'affiche */
 			ipc_command("[app_id=\"^%s$\"] focus", a->app_id);
@@ -423,9 +466,50 @@ static void click_dock(struct output *o, uint32_t button)
 static void p_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t button, uint32_t state)
 {
 	(void)d; (void)p; (void)serial; (void)t;
+#ifdef PLUME_VOID
+	/* dock : bouton gauche relâché -> clic (comme sur Mac), ou fin d'un glisser d'icône */
+	if (state == WL_POINTER_BUTTON_STATE_RELEASED && button == BTN_LEFT && S.press_app >= 0) {
+		int pa = S.press_app;
+		S.press_app = -1;
+		if (S.drag_app >= 0) {
+			struct output *o = S.drag_outp;
+			char label[48];
+			snprintf(label, sizeof label, "%s", S.apps[S.drag_app].label);
+			if (S.drag_out) {
+				dock_remove_label(label);
+			} else if (o) {
+				int ins = dock_insert_index(o);
+				char before[48] = "";
+				if (ins >= 0)
+					snprintf(before, sizeof before, "%s", S.apps[ins].label);
+				dock_move(label, ins >= 0 ? before : NULL);
+			}
+			S.drag_app = -1;
+			S.drag_out = false;
+			mark_dirty(SURF_DOCK);
+			return;
+		}
+		if (S.ptr_surf && S.ptr_surf->kind == SURF_DOCK && pa < S.napps &&
+		    in_rect(S.ptr_surf->out->hit_app[pa], S.px, S.py)) {
+			click_dock(S.ptr_surf->out, BTN_LEFT);
+			sys_update();
+		}
+		return;
+	}
+#endif
 	if (state != WL_POINTER_BUTTON_STATE_PRESSED || !S.ptr_surf)
 		return;
 #ifdef PLUME_VOID
+	if (S.ptr_surf->kind == SURF_DOCK && button == BTN_LEFT && !M.open) {
+		/* bouton gauche enfoncé sur une icône : on attend le relâchement (clic) ou un glisser */
+		S.press_app = -1;
+		for (int i = 0; i < S.napps; i++)
+			if (in_rect(S.ptr_surf->out->hit_app[i], S.px, S.py))
+				S.press_app = i;
+		S.press_x = S.px;
+		S.press_y = S.py;
+		return;
+	}
 	if (M.open) { /* menu ouvert : le clic est pour lui (ou le referme) */
 		if (S.ptr_surf == &M.out->dock)
 			menu_click(S.px, S.py);
@@ -465,6 +549,222 @@ static const struct wl_pointer_listener pointer_listener = {
 	.enter = p_enter, .leave = p_leave, .motion = p_motion, .button = p_button, .axis = p_axis,
 };
 
+
+#ifdef PLUME_VOID
+/* --------- fichiers glissés sur le dock : ouvrir avec l'appli, ou jeter à la corbeille --------- */
+
+static uint32_t dnd_serial;
+
+static void of_offer(void *d, struct wl_data_offer *o, const char *mime)
+{
+	(void)o;
+	if (!strcmp(mime, "text/uri-list"))
+		*(bool *)d = true;
+}
+static void of_src_actions(void *d, struct wl_data_offer *o, uint32_t a) { (void)d; (void)o; (void)a; }
+static void of_action(void *d, struct wl_data_offer *o, uint32_t a) { (void)d; (void)o; (void)a; }
+static const struct wl_data_offer_listener offer_listener = {
+	.offer = of_offer, .source_actions = of_src_actions, .action = of_action,
+};
+static void offer_free(struct wl_data_offer *o)
+{
+	if (!o)
+		return;
+	free(wl_data_offer_get_user_data(o));
+	wl_data_offer_destroy(o);
+}
+
+static struct output *dnd_out;
+
+/* l'appli (ou la corbeille) sous le fichier glissé, si elle peut le recevoir */
+static int drop_app_at(double x, double y)
+{
+	if (!dnd_out)
+		return -1;
+	for (int i = 0; i < S.napps; i++) {
+		struct app *a = &S.apps[i];
+		struct rect r = dnd_out->hit_app[i];
+		r.y -= 10;
+		r.h += 14;
+		if (in_rect(r, x, y) && (a->trash || (a->cmd[0] && !a->power && !a->mini_con)))
+			return i;
+	}
+	return -1;
+}
+
+static void dnd_accept(void)
+{
+	bool *uri = S.offer ? wl_data_offer_get_user_data(S.offer) : NULL;
+	bool ok = uri && *uri && S.drop_app >= 0;
+	wl_data_offer_accept(S.offer, dnd_serial, ok ? "text/uri-list" : NULL);
+	/* copie : le fichier reste où il est (ouvrir avec…) ; la corbeille, elle, le déplace */
+	if (ok)
+		wl_data_offer_set_actions(S.offer, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
+						   WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE,
+					  S.apps[S.drop_app].trash ? WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE
+								   : WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+}
+
+static void dd_data_offer(void *d, struct wl_data_device *dd, struct wl_data_offer *o)
+{
+	(void)d; (void)dd;
+	wl_data_offer_add_listener(o, &offer_listener, calloc(1, sizeof(bool)));
+}
+static void dd_enter(void *d, struct wl_data_device *dd, uint32_t serial, struct wl_surface *sf, wl_fixed_t x,
+		     wl_fixed_t y, struct wl_data_offer *o)
+{
+	(void)d; (void)dd;
+	if (S.offer && S.offer != o && S.offer != S.drop_offer)
+		offer_free(S.offer);
+	S.offer = o;
+	dnd_serial = serial;
+	struct surf *s = find_surf(sf);
+	dnd_out = s && s->kind == SURF_DOCK ? s->out : NULL;
+	S.drop_app = drop_app_at(wl_fixed_to_double(x), wl_fixed_to_double(y));
+	if (o)
+		dnd_accept();
+	mark_dirty(SURF_DOCK);
+}
+static void dd_leave(void *d, struct wl_data_device *dd)
+{
+	(void)d; (void)dd;
+	if (S.offer && S.offer != S.drop_offer)
+		offer_free(S.offer);
+	S.offer = NULL;
+	if (S.drop_fd < 0)
+		S.drop_app = -1;
+	mark_dirty(SURF_DOCK);
+}
+static void dd_motion(void *d, struct wl_data_device *dd, uint32_t t, wl_fixed_t x, wl_fixed_t y)
+{
+	(void)d; (void)dd; (void)t;
+	int a = drop_app_at(wl_fixed_to_double(x), wl_fixed_to_double(y));
+	if (a != S.drop_app) {
+		S.drop_app = a;
+		if (S.offer)
+			dnd_accept();
+		mark_dirty(SURF_DOCK);
+	}
+}
+static void dd_drop(void *d, struct wl_data_device *dd)
+{
+	(void)d; (void)dd;
+	struct wl_data_offer *o = S.offer;
+	S.offer = NULL;
+	bool *uri = o ? wl_data_offer_get_user_data(o) : NULL;
+	int fds[2];
+	if (!o || !uri || !*uri || S.drop_app < 0 || S.drop_fd >= 0 || pipe2(fds, O_CLOEXEC)) {
+		offer_free(o);
+		S.drop_app = -1;
+		return;
+	}
+	wl_data_offer_receive(o, "text/uri-list", fds[1]);
+	close(fds[1]);
+	fcntl(fds[0], F_SETFL, O_NONBLOCK);
+	S.drop_fd = fds[0];
+	S.drop_offer = o;
+	free(S.drop_buf);
+	S.drop_buf = NULL;
+	S.drop_len = 0;
+	wl_display_flush(S.display);
+}
+static void dd_selection(void *d, struct wl_data_device *dd, struct wl_data_offer *o)
+{
+	(void)d; (void)dd;
+	if (o && o != S.offer && o != S.drop_offer)
+		offer_free(o);
+}
+static const struct wl_data_device_listener dd_listener = {
+	.data_offer = dd_data_offer, .enter = dd_enter, .leave = dd_leave, .motion = dd_motion,
+	.drop = dd_drop, .selection = dd_selection,
+};
+
+/* « 'chemin' » pour sh -c (les ' du chemin sont protégés) */
+static void sh_quote_append(char *buf, size_t cap, const char *s)
+{
+	size_t k = strlen(buf);
+	if (k + 3 >= cap)
+		return;
+	buf[k++] = ' ';
+	buf[k++] = '\'';
+	for (; *s && k + 6 < cap; s++) {
+		if (*s == '\'') {
+			memcpy(buf + k, "'\\''", 4);
+			k += 4;
+		} else {
+			buf[k++] = *s;
+		}
+	}
+	buf[k++] = '\'';
+	buf[k] = '\0';
+}
+
+static void dock_drop_read(void)
+{
+	char tmp[4096];
+	for (;;) {
+		ssize_t n = read(S.drop_fd, tmp, sizeof tmp);
+		if (n > 0) {
+			char *nb = realloc(S.drop_buf, S.drop_len + n + 1);
+			if (!nb)
+				break;
+			S.drop_buf = nb;
+			memcpy(S.drop_buf + S.drop_len, tmp, n);
+			S.drop_len += n;
+			S.drop_buf[S.drop_len] = '\0';
+			continue;
+		}
+		if (n < 0 && (errno == EAGAIN || errno == EINTR))
+			return;
+		break;
+	}
+	close(S.drop_fd);
+	S.drop_fd = -1;
+	int ai = S.drop_app;
+	S.drop_app = -1;
+	if (S.drop_buf && ai >= 0 && ai < S.napps) {
+		struct app *a = &S.apps[ai];
+		static char cmd[16384];
+		snprintf(cmd, sizeof cmd, "%s", a->trash ? "gio trash --" : a->cmd);
+		int nfiles = 0;
+		for (char *l = strtok(S.drop_buf, "\r\n"); l; l = strtok(NULL, "\r\n")) {
+			if (strncmp(l, "file://", 7))
+				continue;
+			char path[4096];
+			const char *s = l + 7;
+			if (!strncmp(s, "localhost/", 10))
+				s += 9;
+			size_t k = 0;
+			for (; *s && k + 1 < sizeof path; s++) { /* %20 -> espace… */
+				if (*s == '%' && s[1] && s[2]) {
+					char h[3] = { s[1], s[2], 0 };
+					path[k++] = (char)strtol(h, NULL, 16);
+					s += 2;
+				} else {
+					path[k++] = *s;
+				}
+			}
+			path[k] = '\0';
+			sh_quote_append(cmd, sizeof cmd, path);
+			nfiles++;
+		}
+		if (nfiles) {
+			spawn(cmd);
+			if (!a->trash && !app_is_running(a))
+				a->bounce_t = now_s();
+		}
+	}
+	if (S.drop_offer)
+		wl_data_offer_finish(S.drop_offer);
+	offer_free(S.drop_offer);
+	S.drop_offer = NULL;
+	free(S.drop_buf);
+	S.drop_buf = NULL;
+	mark_dirty(SURF_DOCK);
+	sys_update();
+}
+#endif
+
 static void seat_caps(void *d, struct wl_seat *s, uint32_t caps)
 {
 	(void)d;
@@ -501,6 +801,10 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t name, const char
 		wl_seat_add_listener(S.seat, &seat_listener, NULL);
 	} else if (!strcmp(iface, zwlr_layer_shell_v1_interface.name))
 		S.layer_shell = wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface, minv(ver, 4));
+#ifdef PLUME_VOID
+	else if (!strcmp(iface, wl_data_device_manager_interface.name) && ver >= 3)
+		S.ddm = wl_registry_bind(r, name, &wl_data_device_manager_interface, 3);
+#endif
 	else if (!strcmp(iface, wl_output_interface.name)) {
 		struct output *o = calloc(1, sizeof *o);
 		o->scale = 1;
@@ -549,6 +853,21 @@ static bool animate(double dt)
 			moving = true;
 		}
 	}
+#ifdef PLUME_VOID
+	struct output *mo = S.ptr_surf && S.ptr_surf->kind == SURF_DOCK ? S.ptr_surf->out : NULL;
+	bool on = mo && !M.open && S.drag_app < 0 && S.py >= mo->dock_panel.y - 40;
+	double target = on ? 1 : 0, km = dt / 0.10 > 1 ? 1 : dt / 0.10;
+	double v = S.mag + (target - S.mag) * km;
+	if (fabs(v - target) < 0.01)
+		v = target;
+	if (v != S.mag) {
+		S.mag = v;
+		moving = true;
+	}
+	for (int i = 0; i < S.napps; i++)
+		if (S.apps[i].bounce_t > 0)
+			moving = true;
+#endif
 	if (moving)
 		mark_dirty(SURF_DOCK);
 	return moving;
@@ -582,6 +901,10 @@ int main(int argc, char **argv)
 	wl_list_init(&S.outputs);
 	S.hover_app = -1;
 	S.vol = -1;
+#ifdef PLUME_VOID
+	S.press_app = S.drag_app = S.drop_app = -1;
+	S.drop_fd = -1;
+#endif
 
 	S.display = wl_display_connect(NULL);
 	if (!S.display) {
@@ -597,6 +920,12 @@ int main(int argc, char **argv)
 	}
 	wl_display_roundtrip(S.display); /* noms et échelles des écrans */
 
+#ifdef PLUME_VOID
+	if (S.ddm && S.seat) { /* fichiers glissés sur le dock */
+		S.dd = wl_data_device_manager_get_data_device(S.ddm, S.seat);
+		wl_data_device_add_listener(S.dd, &dd_listener, NULL);
+	}
+#endif
 	cursor_theme = wl_cursor_theme_load(NULL, 24, S.shm);
 	cursor_surface = wl_compositor_create_surface(S.compositor);
 
@@ -631,12 +960,17 @@ int main(int argc, char **argv)
 		while (wl_display_prepare_read(S.display) != 0)
 			wl_display_dispatch_pending(S.display);
 		wl_display_flush(S.display);
-		struct pollfd fds[3] = {
+		struct pollfd fds[4] = {
 			{ .fd = wl_display_get_fd(S.display), .events = POLLIN },
 			{ .fd = tick, .events = POLLIN },
 			{ .fd = S.ipc_ev, .events = POLLIN },
+#ifdef PLUME_VOID
+			{ .fd = S.drop_fd, .events = POLLIN },
+#else
+			{ .fd = -1, .events = 0 },
+#endif
 		};
-		if (poll(fds, S.ipc_ev >= 0 ? 3 : 2, -1) < 0) {
+		if (poll(fds, 4, -1) < 0) {
 			wl_display_cancel_read(S.display);
 			if (errno == EINTR)
 				continue;
@@ -654,6 +988,10 @@ int main(int argc, char **argv)
 			break;
 		if (S.ipc_ev >= 0 && (fds[2].revents & (POLLIN | POLLHUP)))
 			handle_ipc_event();
+#ifdef PLUME_VOID
+		if (S.drop_fd >= 0 && (fds[3].revents & (POLLIN | POLLHUP | POLLERR)))
+			dock_drop_read();
+#endif
 		if (fds[1].revents & POLLIN) {
 			uint64_t exp;
 			if (read(tick, &exp, sizeof exp) < 0)

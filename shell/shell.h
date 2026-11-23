@@ -23,7 +23,12 @@
 #define DOCK_GAP 10
 #define DOCK_PAD 14
 #define DOCK_PANEL_H (DOCK_TILE + 2 * DOCK_PAD + 6)
+#ifdef PLUME_VOID
+#define DOCK_TIP_H 92   /* place au-dessus du dock : icônes agrandies (loupe) + info-bulle */
+#define DOCK_MAG 0.55   /* loupe : +55 % pour l'icône sous la souris, moins pour ses voisines */
+#else
 #define DOCK_TIP_H 60
+#endif
 #define DOCK_MARGIN 10
 #define DOCK_SURF_H (DOCK_PANEL_H + DOCK_TIP_H + DOCK_MARGIN)
 #define MAX_WS 16
@@ -89,6 +94,7 @@ struct output {
 	struct rect dock_panel;
 #ifdef PLUME_VOID
 	struct rect hit_clock;  /* heure et date : notifications (comme sur Mac) */
+	double panel_w_drawn;   /* largeur du dock au dernier dessin (loupe : zone cliquable à refaire) */
 #endif
 };
 
@@ -109,6 +115,9 @@ struct app {
 	double hover;           /* 0..1 animé */
 #ifdef PLUME_VOID
 	bool extra;             /* appli ouverte mais pas épinglée (zone du milieu) */
+	bool trash;             /* la corbeille (au bout du dock) */
+	long mini_con;          /* fenêtre réduite (pastille jaune) : son numéro sway, sinon 0 */
+	double bounce_t;        /* rebond pendant le lancement : heure du clic (0 = pas de rebond) */
 #endif
 };
 
@@ -140,6 +149,28 @@ struct shell {
 #ifdef PLUME_VOID
 	struct app cfg[MAX_APPS]; /* le dock tel qu'écrit dans dock.conf (épinglées + ⏻) */
 	int ncfg;
+	/* loupe façon Mac */
+	double mag;               /* 0..1, animé quand la souris entre / sort du dock */
+	double mag_x;             /* position de la souris le long du dock */
+	struct output *mag_out;
+	/* fenêtres réduites (dans le scratchpad de sway) */
+	struct { long id; char app_id[64]; char title[96]; } mini[8];
+	int nmini;
+	int ntrash;               /* éléments dans la corbeille */
+	/* glisser une icône du dock : réordonner, ou la tirer dehors pour la retirer */
+	int press_app;            /* -1 : aucun bouton enfoncé sur une appli */
+	double press_x, press_y;
+	int drag_app;             /* -1 : pas de glisser */
+	bool drag_out;
+	struct output *drag_outp;
+	/* fichiers glissés sur le dock (ouvrir avec une appli, jeter à la corbeille) */
+	struct wl_data_device_manager *ddm;
+	struct wl_data_device *dd;
+	struct wl_data_offer *offer, *drop_offer;
+	bool offer_uri;
+	int drop_app, drop_fd;
+	char *drop_buf;
+	size_t drop_len;
 #endif
 
 	/* système */
@@ -180,7 +211,7 @@ void dock_layout(struct output *o, int w, int h, double *panel_x, double *panel_
 #define MENU_MAX 16
 #define MENU_WIN_MAX 8
 #define MENU_EXTRA 380 /* hauteur ajoutée au dock quand le menu est ouvert */
-enum menu_act { M_FOCUS, M_OPEN, M_NEW, M_HIDE, M_SHOW, M_REMOVE, M_KEEP, M_QUIT };
+enum menu_act { M_FOCUS, M_OPEN, M_NEW, M_HIDE, M_SHOW, M_REMOVE, M_KEEP, M_QUIT, M_EMPTY_TRASH };
 struct menu_item {
 	char label[160];
 	enum menu_act act;
@@ -204,6 +235,12 @@ void menu_motion(double x, double y);
 void draw_menu(struct output *o, cairo_t *cr, int W, int H);
 /* sys.c : dock = épinglées | ouvertes non épinglées | ⏻ (refait à chaque changement de fenêtres) */
 void dock_compose(void);
+void desktop_info(const char *id, char *name, char *cmd, char *icon);
+/* menu.c : réécrire le dock (glisser une icône pour la déplacer ou la retirer) */
+void dock_move(const char *label, const char *before_label);
+void dock_remove_label(const char *label);
+/* draw.c : où irait une icône glissée (index de l'appli devant laquelle l'insérer, -1 : en dernier) */
+int dock_insert_index(struct output *o);
 /* main.c : zones cliquables du dock à refaire (le nombre d'applis a changé) */
 void dock_relayout(void);
 #endif

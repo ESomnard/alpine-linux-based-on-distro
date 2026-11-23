@@ -88,7 +88,7 @@ void menu_open(struct output *o, int app)
 	if (app < 0 || app >= S.napps)
 		return;
 	struct app *a = &S.apps[app];
-	if (a->power || !a->app_id[0]) /* boutons de fenêtre, alimentation : pas de menu */
+	if (a->power || !a->app_id[0] || a->mini_con) /* alimentation, fenêtre réduite : pas de menu */
 		return;
 	if (M.open)
 		menu_close();
@@ -96,7 +96,10 @@ void menu_open(struct output *o, int app)
 	M.hover = -1;
 	M.app = app;
 	M.out = o;
-	if (app_is_running(a)) {
+	if (a->trash) {
+		add("Ouvrir", M_OPEN, false);
+		add("Vider la corbeille…", M_EMPTY_TRASH, true);
+	} else if (app_is_running(a)) {
 		char *r = ipc_query(4, NULL); /* GET_TREE */
 		struct json *j = json_parse(r);
 		free(r);
@@ -186,6 +189,86 @@ static void dock_remove(const char *label)
 	fclose(out);
 	rename(tmp, user);
 	apps_load();
+}
+
+void dock_remove_label(const char *label)
+{
+	dock_remove(label);
+	mark_dirty(SURF_DOCK);
+}
+
+/* glisser une icône : sa ligne de dock.conf passe juste avant celle de BEFORE (NULL : en dernier
+ * des épinglées, avant le séparateur de ⏻) */
+void dock_move(const char *label, const char *before_label)
+{
+	const char *home = getenv("HOME");
+	if (!home || (before_label && !strcmp(label, before_label)))
+		return;
+	char user[512], tmp[520], dir[512];
+	snprintf(user, sizeof user, "%s/.config/plume/dock.conf", home);
+	FILE *in = fopen(user, "r");
+	if (!in)
+		in = fopen("/etc/plume/dock.conf", "r");
+	if (!in)
+		return;
+	static char buf[16384];
+	size_t len = fread(buf, 1, sizeof buf - 1, in);
+	fclose(in);
+	buf[len] = '\0';
+	/* découper en lignes */
+	static char *lines[512];
+	int nl = 0;
+	for (char *l = buf; *l && nl < 512;) {
+		char *e = strchr(l, '\n');
+		lines[nl++] = l;
+		if (!e)
+			break;
+		*e = '\0';
+		l = e + 1;
+	}
+	/* nom affiché d'une ligne « glyphe | nom | commande | app_id » */
+	int moved = -1, before = -1, power = -1;
+	for (int i = 0; i < nl; i++) {
+		char *l = lines[i];
+		if (l[0] == '#')
+			continue;
+		if (strstr(l, "@power") == l)
+			power = i;
+		char *b1 = strstr(l, " | ");
+		if (!b1)
+			continue;
+		char *nom = b1 + 3, *b2 = strstr(nom, " | ");
+		size_t k = b2 ? (size_t)(b2 - nom) : strlen(nom);
+		if (strlen(label) == k && !strncmp(nom, label, k))
+			moved = i;
+		if (before_label && strlen(before_label) == k && !strncmp(nom, before_label, k))
+			before = i;
+	}
+	if (moved < 0)
+		return;
+	if (before < 0) { /* en dernier : avant le « --- » qui précède ⏻ (ou avant ⏻) */
+		before = power >= 0 ? power : nl;
+		while (before > 0 && before - 1 != moved && !strcmp(lines[before - 1], "---"))
+			before--;
+	}
+	snprintf(dir, sizeof dir, "%s/.config", home);
+	mkdir(dir, 0755);
+	snprintf(dir, sizeof dir, "%s/.config/plume", home);
+	mkdir(dir, 0755);
+	snprintf(tmp, sizeof tmp, "%s.tmp", user);
+	FILE *out = fopen(tmp, "w");
+	if (!out)
+		return;
+	for (int i = 0; i <= nl; i++) {
+		if (i == before)
+			fprintf(out, "%s\n", lines[moved]);
+		if (i < nl && i != moved)
+			fprintf(out, "%s\n", lines[i]);
+	}
+	fclose(out);
+	rename(tmp, user);
+	apps_load();
+	mark_dirty(SURF_DOCK);
 }
 
 /* Garder dans le Dock : ajoute l'appli à la fin des épinglées (avant le séparateur de ⏻) */
@@ -288,6 +371,9 @@ void menu_click(double x, double y)
 	case M_KEEP:
 		dock_keep(&a);
 		mark_dirty(SURF_DOCK);
+		break;
+	case M_EMPTY_TRASH:
+		spawn("plume-corbeille --vider");
 		break;
 	case M_QUIT:
 		ipc_command("[app_id=\"^%s$\"] kill", a.app_id);
