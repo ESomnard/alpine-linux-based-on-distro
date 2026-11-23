@@ -87,6 +87,9 @@ struct output {
 	struct rect hit_logo, hit_ws[MAX_WS], hit_kb, hit_net, hit_vol, hit_power, hit_maj, hit_bt;
 	struct rect hit_app[MAX_APPS];
 	struct rect dock_panel;
+#ifdef PLUME_VOID
+	struct rect hit_clock;  /* heure et date : notifications (comme sur Mac) */
+#endif
 };
 
 struct workspace {

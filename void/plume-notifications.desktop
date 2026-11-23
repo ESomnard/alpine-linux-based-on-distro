@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Notifications
+Comment=Les notifications reçues depuis l'ouverture de la session
+Exec=plume-notifications
+Icon=plume-notifications
+Terminal=false
+Categories=Utility;
+Keywords=notifications;messages;alertes;historique;

@@ -230,9 +230,15 @@ void draw_bar(struct output *o, cairo_t *cr, int W, int H)
 	char hm[8], day[32];
 	snprintf(hm, sizeof hm, "%02d:%02d", tm.tm_hour, tm.tm_min);
 	snprintf(day, sizeof day, "%s %d %s", JOURS[tm.tm_wday], tm.tm_mday, MOIS[tm.tm_mon]);
+#ifdef PLUME_VOID
+	double clock_end = rx + 4;
+#endif
 	double cw = txt(cr, FONT, 13, PANGO_WEIGHT_BOLD, 0.05, C_BRIGHT, 1, rx, cy, 2, 0, hm);
 	rx -= cw + 10;
 	rx -= txt(cr, FONT, 11, PANGO_WEIGHT_NORMAL, 0.08, C_MUTED, 1, rx, cy, 2, 0, day);
+#ifdef PLUME_VOID
+	o->hit_clock = (struct rect){ rx - 4, 0, clock_end - rx + 4, H };
+#endif
 	sep(cr, &rx, cy);
 
 	char buf[48];

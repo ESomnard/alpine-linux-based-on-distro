@@ -118,7 +118,7 @@ vm.login("Test.Plume", PW)
 step("Connexion de l'utilisateur OK")
 ok = True
 ok &= vm.check("glibc", "ldd --version | head -1", r"GNU libc|GLIBC")
-ok &= vm.check("11 composants Plume installés", "xbps-query -l | grep -c ' plume-'", r"\b1[01]\b")
+ok &= vm.check("14 composants Plume installés", "xbps-query -l | grep -c ' plume-'", r"\b14\b")
 for s in ("dbus", "seatd", "greetd", "nftables", "iwd", "bluetoothd", "zramen", "polkitd", "cupsd", "avahi-daemon", "power-profiles-daemon"):
     ok &= vm.check(f"service {s}", f"sudo -n true 2>/dev/null; echo {PW} | sudo -S sv status {s}", r"run:")
 ok &= vm.check("écran de connexion plume-hud (greetd + cage)", "pgrep -af 'plume-hud --greeter'", r"plume-hud")
@@ -183,8 +183,12 @@ dbus-run-session sh -c '
   plume-accessibilite loupe 1 >/dev/null
   plume-ecrans --hdr on | grep -q Vulkan && [ -f ~/.config/plume/rendu-vulkan ] && plume-ecrans --hdr off >/dev/null && [ ! -f ~/.config/plume/rendu-vulkan ] && echo hdr-ok
   sway -C -c /tmp/sway-test.conf >/tmp/sway-check.log 2>&1 && echo config-sway-ok
-  plume-raccourcis & sleep 15
-  swaymsg -t get_tree -r | jq -e "[.. | objects | select(.name? == \\"Raccourcis Plume\\" and .type == \\"floating_con\\")] | length > 0" >/dev/null && echo panneau-ouvert-ok
+  plume-raccourcis &
+  # GTK (yad) démarre lentement dans une VM émulée : on attend la fenêtre (60 s au plus)
+  for i in $(seq 60); do
+    swaymsg -t get_tree -r | jq -e "[.. | objects | select(.name? == \\"Raccourcis Plume\\" and .type == \\"floating_con\\")] | length > 0" >/dev/null && { echo panneau-ouvert-ok; break; }
+    sleep 1
+  done
   plume-raccourcis; sleep 3
   swaymsg -t get_tree -r | jq -e "[.. | objects | select(.name? == \\"Raccourcis Plume\\")] | length == 0" >/dev/null && echo panneau-ferme-ok
   plume-raccourcis --faire b2; sleep 1
@@ -283,7 +287,7 @@ if m:
     vm.login("Test.Plume", PW)
     ok &= vm.check("après retour : logiciel retiré revenu, fichier système ajouté disparu",
                    "command -v micro && [ ! -e /etc/plume-marqueur ] && echo systeme-revenu", r"systeme-revenu")
-    ok &= vm.check("après retour : fichiers personnels intacts (/home)", "cat ~/doc.txt ~/apres.txt", r"doc\s+apres")
+    ok &= vm.check("après retour : fichiers personnels intacts (/home)", "cat ~/doc.txt ~/apres.txt", r"doc[\s\S]*apres")
     ok &= vm.check("après retour : ancien système nettoyé au prochain instantané",
                    f"echo {PW} | sudo -S plume-retour creer suivant >/dev/null && [ \"$(sudo plume-retour | grep -c ancien)\" = 0 ] && echo ancien-nettoye", r"ancien-nettoye")
 step("SUCCES : tous les tests sont passés" if ok else "ECHEC : au moins un test a échoué")

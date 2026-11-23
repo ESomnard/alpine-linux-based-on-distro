@@ -1,0 +1,46 @@
+#!/bin/sh
+# Plume (Void) — notifications reçues depuis l'ouverture de la session.
+#   plume-notifications              la liste (clic sur l'heure dans la barre)
+#   plume-notifications --preparer   au début de la session : garder 100 notifications en mémoire
+#                                    et cacher l'avertissement d'ibus sous Wayland (sans gravité)
+set -u
+MARQUE="# plume-notifications"
+
+if [ "${1:-}" = --preparer ]; then
+	C="$HOME/.config/mako/config"
+	mkdir -p "$(dirname "$C")"
+	[ -f "$C" ] || : > "$C"
+	if ! grep -qF "$MARQUE" "$C"; then
+		# réglage global en tête (avant les sections [ ]), règle ibus à la fin
+		{
+			echo "$MARQUE : historique (réglage ajouté par Plume)"
+			echo "max-history=100"
+			cat "$C"
+			echo
+			echo "$MARQUE : « IBus Notification » (ibus lancé hors du protocole Wayland) : sans gravité"
+			echo "[app-name=ibus category=wayland]"
+			echo "invisible=1"
+		} > "$C.plume" && mv "$C.plume" "$C"
+	fi
+	# mako lit sa configuration au démarrage : on la lui fait relire (quand il est prêt)
+	for i in 1 2 3 4 5 6 7 8 9 10; do makoctl reload 2>/dev/null && break; sleep 1; done
+	exit 0
+fi
+
+command -v makoctl >/dev/null || { echo "mako n'est pas installé" >&2; exit 1; }
+TITRE="Notifications"
+liste() {
+	makoctl history -j 2>/dev/null | jq -r '.[] | (.app_name // "—"), (.summary // ""), ((.body // "") | gsub("\n"; " "))' 2>/dev/null
+}
+if [ -z "$(liste)" ]; then
+	yad --title "$TITRE" --window-icon plume-notifications --image plume-notifications --center --width 420 \
+		--text "<b>Aucune notification</b>\n\nRien n'a été reçu depuis l'ouverture de la session." \
+		--button "Fermer:0" >/dev/null 2>&1
+	exit 0
+fi
+liste | yad --list --title "$TITRE" --window-icon plume-notifications --center --width 760 --height 460 \
+	--text "<b>Notifications depuis l'ouverture de la session</b> (la plus récente en haut)" \
+	--column "Appli" --column "Titre" --column "Message" --no-selection --ellipsize END \
+	--button "Réafficher la dernière:2" --button "Fermer:0" >/dev/null 2>&1
+[ $? -eq 2 ] && makoctl restore
+exit 0

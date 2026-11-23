@@ -354,8 +354,12 @@ static const char *power_cmd(void)
 	for (int i = 0; i < S.napps; i++)
 		if (S.apps[i].power)
 			return S.apps[i].cmd;
+#ifdef PLUME_VOID
+	return "plume-alimentation";
+#else
 	return "swaynag -t warning -m 'Que faire ?' -B 'Éteindre' 'sudo -n /sbin/poweroff' "
 	       "-B 'Redémarrer' 'sudo -n /sbin/reboot' -B 'Déconnexion' 'swaymsg exit'";
+#endif
 }
 
 static void click_bar(struct output *o, uint32_t button)
@@ -370,6 +374,12 @@ static void click_bar(struct output *o, uint32_t button)
 			ipc_command("workspace \"%s\"", S.ws[i].name);
 			return;
 		}
+#ifdef PLUME_VOID
+	if (in_rect(o->hit_clock, x, y)) { /* heure : les notifications reçues (comme sur Mac) */
+		spawn("plume-notifications");
+		return;
+	}
+#endif
 	if (in_rect(o->hit_power, x, y))
 		spawn(power_cmd());
 	else if (in_rect(o->hit_vol, x, y))

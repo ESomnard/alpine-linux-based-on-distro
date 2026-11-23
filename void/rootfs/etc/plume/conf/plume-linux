@@ -5,12 +5,15 @@
 case "${1:-}" in
 help | --help | -h | aide | raccourcis)
 	exec plume-raccourcis --texte ;;
+notifications | notif)
+	exec plume-notifications ;;
 version | --version | -v)
 	v=$(xbps-query -p pkgver plume-bureau 2>/dev/null | sed 's/^plume-bureau-//; s/_.*//')
 	echo "Plume Linux (Void) ${v:-?}" ;;
 *)
 	echo "Plume Linux — commandes :"
 	echo "  plume-linux help       tous les raccourcis clavier"
+	echo "  plume-linux notifications   les notifications reçues"
 	echo "  plume-linux version    version de Plume"
 	[ -z "${1:-}" ] || { echo "Commande inconnue : $1" >&2; exit 1; } ;;
 esac

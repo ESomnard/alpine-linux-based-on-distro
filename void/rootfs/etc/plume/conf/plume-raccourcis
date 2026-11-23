@@ -39,7 +39,7 @@ firefox|2|◎  Firefox|Super+B|exec firefox
 fichiers|2|▤  Fichiers|Super+E|exec pcmanfm
 pilotage|2|◈  Poste de pilotage|Super+X|exec plume-term --hud -a plume-pilotage
 verrou|2|⚷  Verrouiller l'"'"'écran|Super+Échap|exec plume-hud -f || swaylock -f -c 1e1e2e
-eteindre|2|◍  Éteindre / redémarrer / veille|Super+Maj+E|exec swaynag -t warning -m '"'"'Que faire ?'"'"' -B '"'"'Éteindre'"'"' '"'"'sudo -n /sbin/poweroff'"'"' -B '"'"'Redémarrer'"'"' '"'"'sudo -n /sbin/reboot'"'"' -B '"'"'Veille'"'"' '"'"'sudo -n /usr/sbin/zzz'"'"' -B '"'"'Déconnexion'"'"' '"'"'swaymsg exit'"'"'
+eteindre|2|◍  Éteindre / redémarrer / veille / déconnexion|Super+Maj+E|exec plume-alimentation
 recharger|2|↻  Recharger la configuration|Super+Maj+C|reload
 b1|3|Aller au bureau 1|Super+1|workspace number 1
 b2|3|Aller au bureau 2|Super+2|workspace number 2

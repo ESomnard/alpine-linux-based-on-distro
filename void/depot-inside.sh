@@ -68,6 +68,7 @@ mkdir -p "$D/usr/share/plume" && "$D/usr/bin/plume-wall" "$D/usr/share/plume/wal
 finir plume-hud "Écran de connexion et de verrouillage HUD" "$RT pam>=0 greetd>=0 cage>=0" $ARCH
 
 paquet plume-shell shell "Barre et dock HUD (sway)" "$RT librsvg>=0"
+paquet plume-alimentation void/alimentation "Écran Éteindre, Redémarrer, Veille, Déconnexion, Verrouiller" "$RT"
 paquet plume-icones-bureau void/bureau "Fichiers du Bureau sur le bureau (ouvrir, renommer, corbeille…)" "$RT librsvg>=0 gdk-pixbuf>=0 xdg-utils>=0 wl-clipboard>=0"
 paquet plume-term term "Terminal HUD et poste de pilotage" "$RT libvterm>=0"
 paquet plume-lanceur lanceur "Toutes les applications, en grille" "$RT librsvg>=0"
@@ -83,12 +84,12 @@ paquet plume-pastilles-gtk void/pastilles-gtk "Pastilles de fenêtre Plume dans 
 
 # scripts Plume : communs, remplacés par leur version Void quand elle existe
 rm -rf "$D" && mkdir -p "$D/usr/bin"
-for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-linux plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
+for f in plume-maj plume-parefeu plume-theme plume-emulation plume-jeux plume-manette plume-ecrans plume-pilotes plume-vpn plume-batterie plume-nuit plume-portail plume-retour plume-sauvegarde plume-accessibilite plume-raccourcis plume-notifications plume-linux plume-menu plume-bar plume-terminal plume-greeter plume-secureboot; do
 	src=$W/rootfs/etc/plume/conf/$f
 	[ -f "$W/void/rootfs/etc/plume/conf/$f" ] && src=$W/void/rootfs/etc/plume/conf/$f
 	install -m755 "$src" "$D/usr/bin/$f"
 done
-for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour plume-raccourcis plume-term plume-pilotage; do
+for d in plume-ecrans plume-vpn plume-batterie plume-nuit plume-sauvegarde plume-accessibilite plume-retour plume-raccourcis plume-term plume-pilotage plume-notifications; do
 	install -Dm644 "$W/void/$d.desktop" "$D/usr/share/applications/$d.desktop"
 done
 finir plume-outils "Scripts Plume : mises à jour, pare-feu, thème, écrans, jeux, manettes, émulation, lanceurs" "nftables>=0 sudo>=0 jq>=0" noarch
@@ -108,9 +109,25 @@ rm -rf "$D" && mkdir -p "$D/usr/share/icons/hicolor/scalable/apps"
 install -m644 "$W"/void/icones/plume-*.svg "$D/usr/share/icons/hicolor/scalable/apps/"
 finir plume-icones "Logos des applications Plume" "" noarch
 
+# réglages de Plume dans /etc (dock, sway, NVIDIA, AppArmor…) : livrés en paquet pour suivre les
+# mises à jour (plume-maj), au lieu d'être seulement copiés depuis l'ISO à l'installation
+rm -rf "$D" && mkdir -p "$D"
+R=$W/void/rootfs
+cd "$R"
+for f in etc/plume/dock.conf etc/sway/config.d/*.conf etc/modprobe.d/plume-*.conf etc/dracut.conf.d/plume-*.conf \
+	etc/profile.d/plume-void.sh etc/xbps.d/*.conf etc/apparmor.d/plume-* etc/apparmor.d/abstractions/plume-* \
+	etc/xdg/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal/sway-portals.conf usr/lib/plume/*; do
+	[ -f "$R/$f" ] || continue
+	install -Dm644 "$R/$f" "$D/$f"
+done
+cd /
+chmod 755 "$D"/usr/lib/plume/*
+install -m755 "$W/void/reglages/INSTALL" "$D/INSTALL"
+finir plume-reglages "Réglages de Plume (dock, sway, portables NVIDIA, AppArmor), mis à jour avec le système" "" noarch
+
 rm -rf "$D" && mkdir -p "$D"
 finir plume-bureau "Bureau Plume complet (composants HUD)" \
-	"plume-hud>=0 plume-icones>=0 plume-icones-bureau>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-pastilles-gtk>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
+	"plume-hud>=0 plume-reglages>=0 plume-alimentation>=0 plume-icones>=0 plume-icones-bureau>=0 plume-shell>=0 plume-term>=0 plume-lanceur>=0 plume-fonds>=0 plume-wifi>=0 plume-son>=0 plume-bluetooth>=0 plume-logitheque>=0 plume-pastilles-gtk>=0 plume-outils>=0 font-jetbrains-mono>=0" noarch
 
 echo "==> Index et signature"
 cd "$OUT"

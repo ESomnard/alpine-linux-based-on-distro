@@ -1,0 +1,21 @@
+#!/bin/sh
+# plume-reglages — après installation ou mise à jour (xbps lance ce script depuis la racine « / »).
+case "$1" in
+post)
+	# règle « nouveau » des portables Intel/AMD + NVIDIA : si elle a changé, refaire l'image
+	# de démarrage de chaque noyau installé (elle s'applique au tout début du démarrage)
+	s=$(cat etc/modprobe.d/plume-nouveau.conf etc/dracut.conf.d/plume-nouveau.conf usr/lib/plume/nouveau-hybride 2>/dev/null | cksum)
+	if [ "$s" != "$(cat var/lib/plume/nouveau.cksum 2>/dev/null)" ] && command -v dracut >/dev/null 2>&1; then
+		for k in usr/lib/modules/*; do
+			v=${k##*/}
+			[ -f "boot/initramfs-$v.img" ] && dracut -q --force --hostonly "/boot/initramfs-$v.img" "$v" 2>/dev/null
+		done
+		mkdir -p var/lib/plume && echo "$s" > var/lib/plume/nouveau.cksum
+	fi
+	# profils AppArmor de Plume : pris en compte tout de suite
+	if command -v apparmor_parser >/dev/null 2>&1 && [ -d sys/kernel/security/apparmor ]; then
+		for p in etc/apparmor.d/plume-*; do apparmor_parser -r -W "/$p" 2>/dev/null; done
+	fi
+	;;
+esac
+exit 0
