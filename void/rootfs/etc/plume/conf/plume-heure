@@ -1,0 +1,78 @@
+#!/bin/sh
+# Plume (Void) — heure du PC, y compris quand Windows est installé à côté.
+#   plume-heure                 état : heure, fuseau, horloge du PC (UTC ou locale), Windows détecté ?
+#   plume-heure --windows       code 0 si Windows semble installé sur ce PC
+#   sudo plume-heure auto       horloge du PC comme Windows s'il est là (sinon UTC), puis mise à l'heure
+#   sudo plume-heure locale     horloge du PC en heure locale (comme Windows)
+#   sudo plume-heure utc        horloge du PC en UTC (Linux seul)
+#   sudo plume-heure sync       mise à l'heure par Internet maintenant
+#   sudo plume-heure fuseau Europe/Paris
+#
+# Pourquoi : Windows règle l'horloge interne du PC sur l'heure locale, Linux sur UTC. Avec les deux
+# sur le même PC, l'heure se décale d'une heure (ou deux en été) à chaque passage de l'un à l'autre.
+set -eu
+RC=/etc/rc.conf
+
+windows() {
+	# entrée de démarrage UEFI « Windows Boot Manager », ou partition NTFS / BitLocker
+	if command -v efibootmgr >/dev/null && efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'; then
+		return 0
+	fi
+	lsblk -rno FSTYPE 2>/dev/null | grep -qiE '^(ntfs|BitLocker)$'
+}
+
+mode() { sed -n 's/^HARDWARECLOCK="\{0,1\}\([a-z]*\)"\{0,1\}.*/\1/p' "$RC" 2>/dev/null | tail -1; }
+
+racine() { [ "$(id -u)" -eq 0 ] || { echo "À lancer avec sudo : sudo plume-heure $*" >&2; exit 1; }; }
+
+sync_net() {
+	# chrony tourne déjà (service) : on lui demande de corriger tout de suite, même un gros écart
+	if command -v chronyc >/dev/null && chronyc -a 'burst 4/4' >/dev/null 2>&1; then
+		sleep 5
+		chronyc -a makestep >/dev/null 2>&1 && return 0
+	fi
+	command -v chronyd >/dev/null && timeout 20 chronyd -q 'pool pool.ntp.org iburst' >/dev/null 2>&1
+}
+
+regler() { # $1 = utc | localtime
+	racine "$1"
+	if grep -q '^#*HARDWARECLOCK=' "$RC"; then
+		sed -i "s/^#*HARDWARECLOCK=.*/HARDWARECLOCK=\"$1\"/" "$RC"
+	else
+		echo "HARDWARECLOCK=\"$1\"" >> "$RC"
+	fi
+	# l'heure système vient d'Internet ; on l'écrit dans l'horloge du PC dans le bon mode
+	sync_net || echo "Pas de mise à l'heure par Internet (pas de connexion ?) : heure actuelle gardée." >&2
+	if [ "$1" = localtime ]; then hwclock -w --localtime; else hwclock -w --utc; fi || echo "(horloge du PC non écrite : elle le sera à l'arrêt)" >&2
+	echo "Horloge du PC : $([ "$1" = localtime ] && echo 'heure locale (comme Windows)' || echo UTC). Heure : $(date '+%d/%m/%Y %H:%M')"
+}
+
+case "${1:-}" in
+"")
+	echo "Heure     : $(date '+%A %d %B %Y, %H:%M:%S')"
+	echo "Fuseau    : $(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')"
+	m=$(mode); echo "Horloge   : ${m:-utc}$([ "${m:-utc}" = localtime ] && echo ' (comme Windows)')"
+	windows && echo "Windows   : détecté sur ce PC" || echo "Windows   : non détecté"
+	;;
+--windows) windows ;;
+auto)
+	racine auto
+	if windows; then regler localtime; else regler utc; fi
+	;;
+locale | localtime) regler localtime ;;
+utc) regler utc ;;
+sync)
+	racine sync
+	sync_net && echo "Heure mise à jour : $(date '+%d/%m/%Y %H:%M')" || { echo "Mise à l'heure impossible (pas d'Internet ?)." >&2; exit 1; }
+	m=$(mode); if [ "${m:-utc}" = localtime ]; then hwclock -w --localtime; else hwclock -w --utc; fi
+	;;
+fuseau)
+	racine fuseau
+	z=${2:?"fuseau, ex. Europe/Paris"}
+	[ -f "/usr/share/zoneinfo/$z" ] || { echo "Fuseau inconnu : $z" >&2; exit 1; }
+	ln -sf "/usr/share/zoneinfo/$z" /etc/localtime
+	sed -i "s|^#*TIMEZONE=.*|TIMEZONE=$z|" "$RC"
+	echo "Fuseau : $z — heure : $(date '+%H:%M')"
+	;;
+*) echo "Usage : plume-heure [--windows | auto | locale | utc | sync | fuseau ZONE]" >&2; exit 2 ;;
+esac

@@ -1,0 +1,135 @@
+#!/bin/sh
+# Plume (Void) — assistant de premier démarrage : Internet, heure, Flathub, mises à jour, packs, apparence.
+#   plume-bienvenue              ouvre l'assistant
+#   plume-bienvenue --demarrage  (lancé par sway) l'ouvre seulement si pas encore fait, et pas en live
+#   plume-bienvenue --appliquer CHOIX…   (interne) fait le travail dans le terminal Plume
+# Les choix demandant le mot de passe sont regroupés : il n'est demandé qu'une fois.
+set -u
+FAIT="${XDG_CONFIG_HOME:-$HOME/.config}/plume/bienvenue-fait"
+TITRE="Bienvenue sur Plume"
+
+internet() {
+	# un vrai site en HTTPS : vérifie aussi l'heure et les certificats
+	curl -fsS -m 6 -o /dev/null https://repo-default.voidlinux.org/ 2>/dev/null
+}
+internet_brut() { curl -sk -m 6 -o /dev/null https://repo-default.voidlinux.org/ 2>/dev/null; }
+
+titre() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
+
+appliquer() {
+	# $@ : heure flathub maj jeux emulation fonds (ceux cochés)
+	A=" $* "
+	OK=1
+	echo "Plume prépare ton ordinateur. Ton mot de passe peut être demandé une fois."
+	case "$A" in *" heure "*)
+		titre "Heure"
+		sudo plume-heure auto || OK=0 ;;
+	esac
+	case "$A" in *" maj "*)
+		titre "Mises à jour du système"
+		# certificats et xbps d'abord : une ISO un peu ancienne peut refuser les serveurs récents
+		if ! sudo xbps-install -Sy ca-certificates xbps >/dev/null 2>&1; then
+			sudo env SSL_NO_VERIFY_PEER=1 xbps-install -Syu ca-certificates xbps || OK=0
+		fi
+		plume-maj -y || OK=0 ;;
+	esac
+	case "$A" in *" flathub "*)
+		titre "Flathub (Brave, Spotify, Discord, OBS…)"
+		command -v flatpak >/dev/null || sudo xbps-install -Sy flatpak || OK=0
+		if command -v flatpak >/dev/null; then
+			flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo &&
+				flatpak update --user --appstream -y --noninteractive >/dev/null 2>&1 &&
+				echo "Flathub est prêt : cherche tes applis dans la Logithèque." || OK=0
+		fi ;;
+	esac
+	case "$A" in *" jeux "*)
+		titre "Pack Jeux (Steam, Epic et GOG avec Heroic, manettes)"
+		sudo plume-jeux --pc || OK=0 ;;
+	esac
+	case "$A" in *" emulation "*)
+		titre "Pack Émulation"
+		sudo plume-emulation || OK=0 ;;
+	esac
+	mkdir -p "$(dirname "$FAIT")" && touch "$FAIT"
+	echo
+	if [ "$OK" = 1 ]; then
+		printf '\033[1;32mTout est prêt. Bonne découverte de Plume !\033[0m\n'
+		notify-send -a Plume "$TITRE" "Tout est prêt." 2>/dev/null || true
+	else
+		printf '\033[1;33mUne étape n’a pas abouti (voir ci-dessus). Tu peux relancer l’assistant :\n'
+		printf 'Paramètres > Bienvenue, ou « plume-bienvenue » dans un terminal.\033[0m\n'
+	fi
+	case "$A" in *" fonds "*) plume-fonds >/dev/null 2>&1 & ;; esac
+	echo; echo "Tu peux fermer cette fenêtre."
+}
+
+assistant() {
+	command -v yad >/dev/null || exec plume-terminal -T "$TITRE" sh -c "plume-bienvenue --appliquer heure maj flathub; exec bash"
+
+	# 1. Internet
+	while ! internet; do
+		if internet_brut; then
+			# Internet marche mais HTTPS refuse : heure fausse ou certificats trop anciens
+			MSG="Internet fonctionne, mais les sites sécurisés sont refusés : l'heure de l'ordinateur est sans doute fausse ($(date '+%d/%m/%Y %H:%M')).\n\nL'assistant va la corriger (cocher « Mettre l'heure à jour »)."
+			yad --title "$TITRE" --window-icon plume-parametres --image dialog-warning --center --width 480 \
+				--text "$MSG" --button "Continuer:0" >/dev/null 2>&1
+			break
+		fi
+		yad --title "$TITRE" --window-icon plume-parametres --image network-wireless --center --width 460 \
+			--text "<big><b>Bienvenue sur Plume !</b></big>\n\nPour commencer, connecte-toi à Internet (wifi ou câble).\nC'est utile pour les mises à jour et pour installer des applis." \
+			--button "Continuer sans Internet:2" --button "Réessayer:1" --button "Ouvrir le wifi:0" >/dev/null 2>&1
+		case $? in
+		0) plume-wifi >/dev/null 2>&1 ;;
+		1) sleep 1 ;;
+		*) break ;;
+		esac
+	done
+
+	# 2. Choix
+	WIN=FALSE
+	plume-heure --windows 2>/dev/null && WIN=TRUE
+	NOTE_WIN=""
+	[ "$WIN" = TRUE ] && NOTE_WIN="\n<i>Windows est installé sur ce PC : l'horloge sera réglée comme lui (plus d'heure décalée).</i>"
+	FP=TRUE
+	command -v flatpak >/dev/null && flatpak remotes --user 2>/dev/null | grep -q flathub &&
+		[ -f "$HOME/.local/share/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz" ] && FP=FALSE
+	R=$(yad --title "$TITRE" --window-icon plume-parametres --center --width 560 \
+		--form --separator=' ' \
+		--text "<big><b>Préparons ton ordinateur</b></big>\n\nIl est $(date '+%H:%M'), le $(date '+%d/%m/%Y').$NOTE_WIN\nCoche ce que tu veux, Plume s'occupe du reste." \
+		--field "Mettre l'heure à jour (par Internet):CHK" TRUE \
+		--field "Mettre à jour Plume maintenant (conseillé):CHK" TRUE \
+		--field "Activer Flathub : des milliers d'applis (Brave, Spotify, Discord, OBS…):CHK" "$FP" \
+		--field "Pack Jeux : Steam, Epic et GOG (Heroic), manettes:CHK" FALSE \
+		--field "Pack Émulation : consoles rétro (environ 1 Go):CHK" FALSE \
+		--field "Choisir ensuite le fond d'écran et la couleur:CHK" TRUE \
+		--button "Ne plus afficher:2" --button "Plus tard:1" --button "C'est parti:0")
+	case $? in
+	0) ;;
+	2) mkdir -p "$(dirname "$FAIT")" && touch "$FAIT"; exit 0 ;;
+	*) exit 0 ;;
+	esac
+	set -- $R
+	CH=""
+	[ "${1:-}" = TRUE ] && CH="$CH heure"
+	[ "${2:-}" = TRUE ] && CH="$CH maj"
+	[ "${3:-}" = TRUE ] && CH="$CH flathub"
+	[ "${4:-}" = TRUE ] && CH="$CH jeux"
+	[ "${5:-}" = TRUE ] && CH="$CH emulation"
+	[ "${6:-}" = TRUE ] && CH="$CH fonds"
+	if [ -z "$CH" ]; then
+		mkdir -p "$(dirname "$FAIT")" && touch "$FAIT"
+		exit 0
+	fi
+	exec plume-terminal -a plume-bienvenue -T "$TITRE" sh -c "plume-bienvenue --appliquer$CH; exec bash"
+}
+
+case "${1:-}" in
+--demarrage)
+	[ -f /etc/default/live.conf ] && exit 0   # session live : pas d'assistant
+	[ -f "$FAIT" ] && exit 0
+	sleep 4   # laisse le bureau s'afficher
+	assistant ;;
+--appliquer) shift; appliquer "$@" ;;
+"") assistant ;;
+*) echo "Usage : plume-bienvenue [--demarrage]" >&2; exit 2 ;;
+esac

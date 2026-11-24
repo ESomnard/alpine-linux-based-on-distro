@@ -179,6 +179,20 @@ sed -i "s/^#*KEYMAP=.*/KEYMAP=$CLAVIER/" "$MNT/etc/rc.conf"
 grep -q '^KEYMAP=' "$MNT/etc/rc.conf" || echo "KEYMAP=$CLAVIER" >> "$MNT/etc/rc.conf"
 [ -f "$MNT/usr/share/zoneinfo/$FUSEAU" ] && ln -sf "/usr/share/zoneinfo/$FUSEAU" "$MNT/etc/localtime"
 sed -i "s|^#*TIMEZONE=.*|TIMEZONE=$FUSEAU|" "$MNT/etc/rc.conf"
+# Windows sur ce PC (autre disque, ou entrée de démarrage UEFI) : il règle l'horloge du PC en heure
+# locale ; Plume fait pareil, sinon l'heure se décale d'une heure à chaque passage de l'un à l'autre
+if { command -v efibootmgr >/dev/null && efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'; } ||
+	lsblk -rno FSTYPE 2>/dev/null | grep -qiE '^(ntfs|BitLocker)$'; then
+	HC=localtime
+	log "Windows détecté sur ce PC : horloge en heure locale (comme Windows)"
+else
+	HC=utc
+fi
+if grep -q '^#*HARDWARECLOCK=' "$MNT/etc/rc.conf"; then
+	sed -i "s/^#*HARDWARECLOCK=.*/HARDWARECLOCK=\"$HC\"/" "$MNT/etc/rc.conf"
+else
+	echo "HARDWARECLOCK=\"$HC\"" >> "$MNT/etc/rc.conf"
+fi
 
 # utilisateur (mots de passe : seulement dans /etc/shadow du système installé)
 # --badnames : majuscules et points permis (comme Debian), refusés par défaut par useradd de Void

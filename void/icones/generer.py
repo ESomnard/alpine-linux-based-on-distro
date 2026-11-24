@@ -99,4 +99,14 @@ icon('plume-corbeille', '#9aa5b4', '#4b5563', '''    <path d="M40 46h48l-4 46a6 
 icon('plume-corbeille-pleine', '#9aa5b4', '#4b5563', '''    <path d="M40 54h48l-4 38a6 6 0 0 1-6 5H50a6 6 0 0 1-6-5z" fill="#fff" fill-opacity=".16"/>
     <path d="M48 52l6-18 14 6M66 50l12-16 10 10" stroke-width="5"/>
     <path d="M34 54h60M54 64v24M64 64v24M74 64v24" stroke-width="6"/>''')
+icon('plume-bienvenue', '#ff8a00', '#e52e71', '''    <path d="M64 30l9 19 21 3-15 15 4 21-19-10-19 10 4-21-15-15 21-3z" fill="#fff" fill-opacity=".22"/>
+    <path d="M64 30l9 19 21 3-15 15 4 21-19-10-19 10 4-21-15-15 21-3z" stroke-width="6"/>''')
+icon('plume-heure', '#2563eb', '#7c3aed', '''    <circle cx="64" cy="64" r="32" stroke-width="6"/>
+    <path d="M64 44v22l14 9"/>''')
+icon('plume-rapport', '#f59e0b', '#dc2626', '''    <path d="M64 32l34 60H30z" fill="#fff" fill-opacity=".18" stroke-width="6"/>
+    <path d="M64 54v18"/>
+    <circle cx="64" cy="82" r="4.5" fill="#fff" stroke="none"/>''')
+icon('plume-dev', '#0f172a', '#4338ca', '''    <path d="M48 46L30 64l18 18" stroke="#a5b4fc"/>
+    <path d="M80 46l18 18-18 18" stroke="#a5b4fc"/>
+    <path d="M70 38L58 90" stroke="#fff"/>''')
 print(len(os.listdir(OUT)), 'icônes')

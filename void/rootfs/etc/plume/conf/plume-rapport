@@ -1,0 +1,139 @@
+#!/bin/sh
+# Plume (Void) — « Signaler un problème » : rassemble en un seul fichier texte ce qui aide à
+# comprendre un souci (version de Plume, matériel, pilotes, réseau, son, écrans, erreurs récentes).
+#   plume-rapport              fenêtre : décrire le problème, puis créer le rapport
+#   plume-rapport --texte      crée le rapport sans fenêtre et affiche son chemin
+#   plume-rapport --complet    ajoute les journaux réservés à l'administrateur (mot de passe)
+# Rien n'est envoyé : le fichier est créé dans Documents, tu choisis à qui le donner.
+# Les identifiants (adresses MAC, numéros de série, noms des réseaux wifi) sont masqués.
+set -u
+DOSSIER=$(xdg-user-dir DOCUMENTS 2>/dev/null || echo "$HOME/Documents")
+[ -d "$DOSSIER" ] || DOSSIER=$HOME
+FICHIER="$DOSSIER/plume-rapport-$(date +%Y-%m-%d_%H%M).txt"
+DESCRIPTION=""
+COMPLET=0
+
+bloc() { # titre commande…
+	t=$1; shift
+	printf '\n===== %s =====\n' "$t"
+	if command -v "$1" >/dev/null 2>&1; then
+		timeout 15 "$@" 2>&1 | head -n 400
+	else
+		echo "($1 absent)"
+	fi
+}
+
+masquer() {
+	# adresses MAC, numéros de série, nom d'utilisateur (s'il est assez long pour ne pas abîmer le texte)
+	u=$(id -un | sed 's/[][\.*^$/&|]/\\&/g')
+	if [ ${#u} -ge 3 ]; then
+		sed -E \
+			-e 's/([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/xx:xx:xx:xx:xx:xx/g' \
+			-e 's/(SERIAL|[Ss]erial[ _]?[Nn]umber|ID_SERIAL[A-Z_]*)([=: ]+)[^ ]+/\1\2(masqué)/g' \
+			-e "s|\\b$u\\b|MOI|g"
+	else
+		sed -E \
+			-e 's/([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/xx:xx:xx:xx:xx:xx/g' \
+			-e 's/(SERIAL|[Ss]erial[ _]?[Nn]umber|ID_SERIAL[A-Z_]*)([=: ]+)[^ ]+/\1\2(masqué)/g' \
+			-e "s|/home/$u/|/home/MOI/|g"
+	fi
+}
+
+collecter() {
+	{
+		echo "Rapport Plume — $(date '+%d/%m/%Y %H:%M')"
+		echo
+		echo "Problème décrit :"
+		if [ -n "$DESCRIPTION" ]; then printf '%s\n' "$DESCRIPTION"; else echo "(non décrit)"; fi
+
+		printf '\n===== Plume =====\n'
+		cat /etc/plume/version 2>/dev/null || true
+		xbps-query -p pkgver plume-bureau 2>/dev/null || echo "plume-bureau : ?"
+		xbps-query -l 2>/dev/null | awk '$2 ~ /^plume-/ {print "  " $2}'
+		echo "Paquets installés : $(xbps-query -l 2>/dev/null | wc -l)"
+		[ -f /etc/default/live.conf ] && echo "Session : LIVE (clé USB)" || echo "Session : installée"
+		bloc "Système" uname -a
+		bloc "Démarrage (UEFI ou BIOS)" sh -c '[ -d /sys/firmware/efi ] && echo UEFI || echo BIOS; cat /proc/cmdline | sed -E "s/(cryptdevice|rd.luks.uuid)=[^ ]*/\1=(masqué)/g"'
+		bloc "Ordinateur" sh -c 'for f in sys_vendor product_name product_version bios_version bios_date; do printf "%s : %s\n" $f "$(cat /sys/class/dmi/id/$f 2>/dev/null)"; done'
+		bloc "Processeur" sh -c 'grep -m1 "model name" /proc/cpuinfo; nproc'
+		bloc "Mémoire" free -h
+		bloc "Disques" lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,MODEL
+		bloc "Place libre" df -h -x tmpfs -x devtmpfs
+		bloc "Cartes (PCI) et pilotes" lspci -nnk
+		bloc "Périphériques USB" lsusb
+		bloc "Pilotes chargés (graphique, wifi, son)" sh -c 'lsmod | grep -Ei "^(i915|xe|amdgpu|radeon|nouveau|nvidia|iwlwifi|ath|rtw|rtl|mt7|brcm|b43|snd_hda|snd_sof|btusb)" || echo aucun'
+		bloc "Écrans (sway)" swaymsg -t get_outputs
+		bloc "Version de sway" sway --version
+		bloc "Son (PipeWire)" wpctl status
+		bloc "Réseau : interfaces" ip -br addr
+		bloc "Réseau : wifi" sh -c 'iwctl device list; iwctl station list'
+		bloc "Réseau : routes et DNS" sh -c 'ip route; grep -v "^#" /etc/resolv.conf'
+		bloc "Réseau : Internet" sh -c 'curl -sS -m 8 -o /dev/null -w "HTTPS : %{http_code}\n" https://repo-default.voidlinux.org/ 2>&1'
+		bloc "Bluetooth" sh -c 'rfkill list; bluetoothctl show 2>/dev/null | grep -E "Powered|Discoverable|Pairable"'
+		bloc "Heure" sh -c 'plume-heure; chronyc tracking 2>/dev/null | head -4'
+		bloc "Services actifs" sh -c 'ls /var/service/'
+		bloc "Batterie" sh -c 'for b in /sys/class/power_supply/BAT*; do [ -d "$b" ] && echo "$(basename $b) : $(cat $b/capacity 2>/dev/null) % — $(cat $b/status 2>/dev/null)"; done; true'
+		bloc "Flatpak" sh -c 'flatpak remotes 2>&1; flatpak list --app --columns=application,version 2>&1 | head -60'
+		bloc "Erreurs de la session (sway)" sh -c 'f=$(ls -t /tmp/sway*.log "$HOME"/.local/state/sway*.log 2>/dev/null | head -1); [ -n "$f" ] && grep -iE "error|fail|warn" "$f" | tail -60 || echo "(pas de journal sway)"'
+		if [ "$COMPLET" = 1 ]; then
+			bloc "Noyau : erreurs (dmesg)" sudo dmesg --level=emerg,alert,crit,err,warn
+			bloc "Journal système (fin)" sudo sh -c 'tail -n 150 /var/log/socklog/everything/current 2>/dev/null || echo "(socklog absent)"'
+			bloc "Services (état)" sudo sh -c 'sv status /var/service/* 2>&1'
+		else
+			bloc "Noyau : erreurs (dmesg)" sh -c 'dmesg --level=emerg,alert,crit,err,warn 2>/dev/null | tail -150 || echo "(réservé à l administrateur : plume-rapport --complet)"'
+		fi
+	} 2>&1 | masquer > "$FICHIER"
+	# noms des réseaux wifi enregistrés : masqués
+	for n in /var/lib/iwd/*.psk /var/lib/iwd/*.open /var/lib/iwd/*.8021x; do
+		[ -e "$n" ] || continue
+		s=$(basename "${n%.*}")
+		case "$s" in =*) continue ;; esac
+		esc=$(printf '%s' "$s" | sed 's/[][\.*^$/&]/\\&/g')
+		sed -i "s/$esc/(réseau wifi)/g" "$FICHIER"
+	done
+	chmod 600 "$FICHIER"
+}
+
+fenetre() {
+	command -v yad >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { collecter; echo "Rapport créé : $FICHIER"; exit 0; }
+	R=$(yad --title "Signaler un problème" --window-icon dialog-information --center --width 560 --height 420 \
+		--form --separator='\n' \
+		--text "<big><b>Signaler un problème</b></big>\n\nDécris ce qui ne marche pas (ce que tu faisais, ce qui s'est passé).\nPlume ajoute les informations techniques. <b>Rien n'est envoyé</b> : un fichier est créé dans Documents." \
+		--field "Ce qui ne marche pas::TXT" "" \
+		--field "Ajouter les journaux du système (mot de passe demandé):CHK" FALSE \
+		--button "Annuler:1" --button "Créer le rapport:0") || exit 0
+	COMPLET=0
+	DESCRIPTION=$(printf '%s\n' "$R" | sed '$d')
+	[ "$(printf '%s\n' "$R" | tail -1)" = TRUE ] && COMPLET=1
+	# yad renvoie les retours à la ligne du champ texte sous forme de \n
+	DESCRIPTION=$(printf '%b' "$DESCRIPTION")
+	if [ "$COMPLET" = 1 ]; then
+		# mot de passe dans un terminal (sudo), puis on revient ici
+		export PLUME_RAPPORT_DESC="$DESCRIPTION"
+		exec plume-terminal -T "Signaler un problème" sh -c 'plume-rapport --depuis-fenetre; echo; echo "Tu peux fermer cette fenêtre."; exec bash'
+	fi
+	collecter
+	fini
+}
+
+fini() {
+	command -v yad >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { echo "Rapport créé : $FICHIER"; return; }
+	yad --title "Signaler un problème" --image dialog-information --center --width 480 \
+		--text "Rapport créé :\n<b>$(basename "$FICHIER")</b> (dans $(basename "$DOSSIER"))\n\nEnvoie ce fichier à la personne qui t'aide (mail, message…)." \
+		--button "Copier le texte:2" --button "Ouvrir le dossier:1" --button "Fermer:0" >/dev/null 2>&1
+	case $? in
+	1) xdg-open "$DOSSIER" >/dev/null 2>&1 & ;;
+	2) wl-copy < "$FICHIER" && notify-send -a Plume "Rapport copié" "Colle-le dans un mail ou un message." 2>/dev/null ;;
+	esac
+}
+
+case "${1:-}" in
+"") fenetre ;;
+--texte) collecter; echo "Rapport créé : $FICHIER" ;;
+--complet) COMPLET=1; sudo -v && collecter; echo "Rapport créé : $FICHIER" ;;
+--depuis-fenetre)
+	COMPLET=1; DESCRIPTION=${PLUME_RAPPORT_DESC:-}
+	sudo -v || COMPLET=0
+	collecter; echo "Rapport créé : $FICHIER"; fini ;;
+*) echo "Usage : plume-rapport [--texte | --complet]" >&2; exit 2 ;;
+esac

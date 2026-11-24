@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Signaler un problème
+Comment=Créer un rapport (matériel, pilotes, erreurs) à envoyer à qui t'aide
+Exec=plume-rapport
+Icon=plume-rapport
+Terminal=false
+Categories=Settings;
+Keywords=bug;problème;rapport;aide;diagnostic;panne;
+NoDisplay=true

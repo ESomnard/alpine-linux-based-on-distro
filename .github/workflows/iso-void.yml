@@ -1,0 +1,102 @@
+# Plume Void — construction de l'ISO et publication en téléchargement (GitHub Releases).
+# Se lance :
+#   - quand tu pousses un tag de version :  git tag v1.0.1 && git push origin v1.0.1
+#   - ou à la main : GitHub > Actions > « ISO Plume Void » > Run workflow
+# Utilise la même clé de signature que le dépôt (secret PLUME_VOID_KEY, voir depot-void.yml) :
+# l'ISO et les mises à jour sont ainsi signées par la même clé.
+# Taille max d'un fichier de Release : 2 Go (l'ISO Void fait environ 1,9 Go).
+name: ISO Plume Void
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: iso-void
+  cancel-in-progress: false
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Place disque (le runner n'a qu'environ 14 Go libres)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker system prune -af >/dev/null 2>&1 || true
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # révision des paquets = nombre de commits (comme void/depot.sh)
+
+      - name: Clé de signature (secret PLUME_VOID_KEY)
+        env:
+          PLUME_VOID_KEY: ${{ secrets.PLUME_VOID_KEY }}
+        run: |
+          if [ -z "$PLUME_VOID_KEY" ]; then
+            echo "::error::Secret PLUME_VOID_KEY absent : voir l'en-tête de depot-void.yml."
+            exit 1
+          fi
+          mkdir -p cles out
+          printf '%s\n' "$PLUME_VOID_KEY" > cles/plume-void.pem
+          chmod 600 cles/plume-void.pem
+
+      - name: Dépôt Plume (paquets signés, embarqués dans l'ISO)
+        run: |
+          docker run --rm -v "$PWD":/work \
+            -e REL="$(git rev-list --count HEAD)" -e VERSION="$(cat paquets/VERSION)" \
+            ghcr.io/void-linux/void-glibc-full:latest sh /work/void/depot-inside.sh
+
+      - name: Effacer la clé
+        if: always()
+        run: sudo shred -u cles/plume-void.pem 2>/dev/null || sudo rm -f cles/plume-void.pem
+
+      - name: ISO (void-mklive)
+        run: |
+          docker run --rm --privileged -v "$PWD":/work \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            ghcr.io/void-linux/void-glibc-full:latest sh /work/void/inside-container.sh
+          sudo chown -R "$(id -u):$(id -g)" out
+          ls -lh out/*.iso
+
+      - name: Publication (GitHub Releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat paquets/VERSION)
+          REV=$(git rev-list --count HEAD)
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then TAG=${GITHUB_REF_NAME}; else TAG="v$VERSION-r$REV"; fi
+          mkdir -p rel
+          mv out/plume-void-*-x86_64.iso "rel/plume-void-$VERSION-r$REV-x86_64.iso"
+          (cd rel && sha256sum ./*.iso | sed 's| \./| |' > SHA256SUMS)
+          TAILLE=$(du -h rel/*.iso | cut -f1)
+          cat > notes.md <<NOTES
+          ## Plume Linux (Void) $VERSION — révision $REV
+
+          ISO construite automatiquement depuis le commit \`$(git rev-parse --short HEAD)\` ($TAILLE).
+          Bureau déjà dans l'ISO : essai en live, installation sans Internet.
+
+          ### Installer
+          1. Copier l'ISO sur une clé USB (Balena Etcher, Ventoy, ou \`dd\`).
+          2. Démarrer dessus (BIOS ou UEFI).
+          3. Session live \`plume\` / mot de passe \`voidlinux\`, puis « Installer Plume » dans la grille des applis.
+
+          Au premier démarrage du PC installé, l'assistant **Bienvenue** règle l'heure, Flathub et les mises à jour.
+
+          ### Vérifier le téléchargement
+          \`\`\`
+          sha256sum -c SHA256SUMS
+          \`\`\`
+          NOTES
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" rel/*.iso rel/SHA256SUMS --clobber
+          else
+            gh release create "$TAG" rel/*.iso rel/SHA256SUMS --title "Plume Linux (Void) $VERSION — révision $REV" \
+              --notes-file notes.md --latest
+          fi
+          echo "Publié : https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"

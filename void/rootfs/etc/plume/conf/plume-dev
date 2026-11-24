@@ -1,0 +1,293 @@
+#!/bin/sh
+# Plume (Void) — pack développeur : tout ce qu'il faut pour lancer tes projets (/etc/plume/projets.conf).
+#   plume-dev                   menu : installer, récupérer les projets, lancer un projet
+#   plume-dev installer         installe tout (mot de passe demandé une fois) :
+#                                 système : Node.js, Java 21 et 25, Docker + compose, QEMU, Git, gh,
+#                                           outils de compilation, bibliothèques d'Electron, adb, Tailscale…
+#                                 ton compte : Flutter, SDK Android, Claude Code, variables (JAVA_HOME…)
+#   plume-dev projets           clone (ou met à jour) les projets dans ~/Projets
+#   plume-dev lancer ID         lance un projet dans un terminal (ex. plume-dev lancer hud)
+#   plume-dev liste             projets connus et leur état
+#   plume-dev verifier          ce qui est installé ou non
+#   plume-dev emulateur         (facultatif) émulateur Android + image système (~4 Go)
+set -u
+CONF=/etc/plume/projets.conf
+CONF_PERSO="${XDG_CONFIG_HOME:-$HOME/.config}/plume/projets.conf"
+PROJETS="${PLUME_PROJETS:-$HOME/Projets}"
+SDK="$HOME/Android/Sdk"
+FLUTTER="$HOME/development/flutter"
+ANDROID_API=36
+ANDROID_BUILD_TOOLS=36.0.0
+
+PAQUETS="git github-cli openssh nodejs zsh openjdk21 openjdk25 docker docker-compose docker-buildx
+qemu qemu-system-amd64 edk2-ovmf make base-devel clang cmake ninja pkg-config gtk+3-devel lld
+unzip zip xz curl which file jq ripgrep rsync xorriso python3 openssl
+nss alsa-lib libXScrnSaver libcups at-spi2-core libgbm mesa-dri mesa-demos glu libnotify libsecret xdg-utils
+android-tools android-udev-rules tailscale cloudflared"
+
+titre() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
+ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+ko() { printf '  \033[31m✗\033[0m %s\n' "$1"; }
+
+# ---------------------------------------------------------------- projets.conf
+projets() { # id|nom|depot|commande — le fichier perso remplace les mêmes identifiants
+	for f in "$CONF" "$CONF_PERSO"; do [ -r "$f" ] && grep -v '^[[:space:]]*\(#\|$\)' "$f"; done |
+		awk -F'|' '{ for (i = 1; i <= NF; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
+			if (!($1 in vu)) ordre[n++] = $1; vu[$1] = $1 "|" $2 "|" $3 "|" $4 }
+			END { for (i = 0; i < n; i++) print vu[ordre[i]] }'
+}
+champ() { projets | awk -F'|' -v id="$1" -v c="$2" '$1 == id { print $c }'; }
+
+# ---------------------------------------------------------------- environnement
+ENV_FILE=/etc/profile.d/plume-dev.sh
+ecrire_env() { # (root) variables pour tous les comptes, lues à la connexion
+	cat > "$ENV_FILE" <<'EOF'
+# Plume — pack développeur (plume-dev) : Java, Android, Flutter, outils npm du compte
+export JAVA_HOME=/usr/lib/jvm/openjdk21
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+for d in "$HOME/.local/bin" "$HOME/development/flutter/bin" "$ANDROID_HOME/platform-tools" \
+	"$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/emulator"; do
+	case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$d:$PATH" ;; esac
+done
+export PATH
+# Electron (HUD Lockscreen…) : fenêtres Wayland natives
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+EOF
+	chmod 644 "$ENV_FILE"
+	# terminaux non « login » (bash -i) : mêmes variables
+	grep -q plume-dev.sh /etc/bash/bashrc.d/plume-dev.sh 2>/dev/null || {
+		mkdir -p /etc/bash/bashrc.d
+		echo '[ -r /etc/profile.d/plume-dev.sh ] && . /etc/profile.d/plume-dev.sh' > /etc/bash/bashrc.d/plume-dev.sh
+	}
+}
+charger_env() { [ -r "$ENV_FILE" ] && . "$ENV_FILE"; true; }
+
+# ---------------------------------------------------------------- partie système (root)
+systeme() {
+	[ "$(id -u)" -eq 0 ] || { echo "plume-dev --systeme : à lancer avec sudo" >&2; exit 1; }
+	U=${1:-${SUDO_USER:-}}
+	titre "Paquets du système"
+	xbps-install -Sy xbps >/dev/null 2>&1 || true
+	# shellcheck disable=SC2086
+	xbps-install -Sy $PAQUETS || { echo "Échec de l'installation des paquets." >&2; return 1; }
+
+	titre "Services (Docker, Tailscale)"
+	for s in docker tailscaled; do
+		[ -d "/etc/sv/$s" ] && [ ! -e "/var/service/$s" ] && ln -s "/etc/sv/$s" /var/service/ && echo "  service $s activé"
+	done
+	# pare-feu Plume : il laisse déjà passer le routage (forward) ; on permet en plus aux conteneurs
+	# de joindre l'ordinateur lui-même (host.docker.internal, base de données locale…)
+	if [ -d /etc/nftables.d ] && [ ! -f /etc/nftables.d/50-plume-docker.nft ]; then
+		cat > /etc/nftables.d/50-plume-docker.nft <<'EOF'
+# Plume (plume-dev) — les conteneurs Docker peuvent joindre cet ordinateur ; rien de l'extérieur.
+add rule inet filter input iifname "docker0" accept comment "Docker"
+add rule inet filter input iifname "br-*" accept comment "Docker (réseaux compose)"
+EOF
+		nft -c -f /etc/nftables.nft >/dev/null 2>&1 && nft -f /etc/nftables.nft 2>/dev/null || true
+		# recharger le pare-feu efface les règles de Docker : il les recrée en redémarrant
+		sv restart docker >/dev/null 2>&1 || true
+	fi
+
+	if [ -n "$U" ] && id "$U" >/dev/null 2>&1; then
+		titre "Droits de $U (Docker, émulateur Android, téléphone en USB)"
+		for g in docker kvm plugdev adbusers; do
+			getent group "$g" >/dev/null && usermod -aG "$g" "$U" && echo "  groupe $g"
+		done
+	fi
+
+	# Plume Manager (pensé pour macOS) appelle « caffeinate » : équivalent Linux qui lance simplement
+	# la commande (la mise en veille automatique de Plume ne coupe pas le réseau d'une session active)
+	[ -e /usr/local/bin/caffeinate ] || {
+		cat > /usr/local/bin/caffeinate <<'EOF'
+#!/bin/sh
+# Plume — remplaçant de « caffeinate » (macOS) : ignore les options, lance la commande
+while [ $# -gt 0 ]; do case "$1" in -t|-w) shift 2 ;; -*) shift ;; *) break ;; esac; done
+[ $# -gt 0 ] && exec "$@"
+exec sleep infinity
+EOF
+		chmod 755 /usr/local/bin/caffeinate
+	}
+	ecrire_env
+	ok "Partie système terminée"
+}
+
+# ---------------------------------------------------------------- partie compte (utilisateur)
+android_sdk() {
+	export JAVA_HOME=/usr/lib/jvm/openjdk21
+	if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+		titre "SDK Android (outils en ligne de commande de Google)"
+		Z=$(curl -fsSL https://developer.android.com/studio 2>/dev/null |
+			grep -oE 'commandlinetools-linux-[0-9]+_latest\.zip' | head -1)
+		Z=${Z:-commandlinetools-linux-13114758_latest.zip}
+		T=$(mktemp -d)
+		curl -fL --progress-bar -o "$T/c.zip" "https://dl.google.com/android/repository/$Z" || { rm -rf "$T"; return 1; }
+		mkdir -p "$SDK/cmdline-tools"
+		unzip -q "$T/c.zip" -d "$T" && rm -rf "$SDK/cmdline-tools/latest" && mv "$T/cmdline-tools" "$SDK/cmdline-tools/latest"
+		rm -rf "$T"
+	fi
+	S="$SDK/cmdline-tools/latest/bin/sdkmanager"
+	[ -x "$S" ] || return 1
+	titre "SDK Android : plateforme $ANDROID_API, outils de compilation, adb"
+	yes 2>/dev/null | "$S" --sdk_root="$SDK" --licenses >/dev/null 2>&1
+	"$S" --sdk_root="$SDK" "platform-tools" "platforms;android-$ANDROID_API" "build-tools;$ANDROID_BUILD_TOOLS" | grep -v '^\[' || true
+}
+
+flutter_sdk() {
+	if [ ! -x "$FLUTTER/bin/flutter" ]; then
+		titre "Flutter (canal stable)"
+		mkdir -p "$(dirname "$FLUTTER")"
+		git clone -q --depth 1 -b stable https://github.com/flutter/flutter.git "$FLUTTER" || return 1
+	fi
+	F="$FLUTTER/bin/flutter"
+	"$F" --disable-analytics >/dev/null 2>&1 || true
+	"$F" config --android-sdk "$SDK" >/dev/null 2>&1 || true
+	titre "Flutter : premier démarrage (télécharge le moteur)"
+	yes 2>/dev/null | "$F" doctor --android-licenses >/dev/null 2>&1 || true
+	"$F" precache --android --linux >/dev/null 2>&1 || true
+	"$F" --version | head -1
+}
+
+npm_globaux() {
+	titre "Outils npm de ton compte (Claude Code)"
+	# paquets « -g » dans ~/.local : pas besoin de sudo
+	npm config set prefix "$HOME/.local" >/dev/null
+	npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 && ok "Claude Code : $("$HOME/.local/bin/claude" --version 2>/dev/null | head -1)" ||
+		ko "Claude Code non installé (npm install -g @anthropic-ai/claude-code)"
+}
+
+compte() {
+	charger_env
+	android_sdk || ko "SDK Android : échec (relance « plume-dev installer »)"
+	flutter_sdk || ko "Flutter : échec (relance « plume-dev installer »)"
+	npm_globaux
+}
+
+installer() {
+	[ "$(id -u)" -ne 0 ] || { echo "Lance « plume-dev installer » depuis ton compte (sans sudo) : le mot de passe sera demandé." >&2; exit 1; }
+	echo "Pack développeur Plume : environ 5 Go à télécharger. Ton mot de passe est demandé une fois."
+	sudo "$0" --systeme "$(id -un)" || exit 1
+	compte
+	titre "Projets"
+	cloner
+	verifier
+	echo
+	echo "Déconnecte-toi puis reconnecte-toi une fois (droits Docker et variables JAVA_HOME, ANDROID_HOME…)."
+	echo "Ensuite : « plume-dev » pour lancer un projet."
+}
+
+# ---------------------------------------------------------------- projets
+acces_github() { # ssh (clé) > gh (connexion web) > https public
+	ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -q 'successfully authenticated' && { echo ssh; return; }
+	command -v gh >/dev/null && gh auth status >/dev/null 2>&1 && { echo gh; return; }
+	echo https
+}
+
+cloner() {
+	mkdir -p "$PROJETS"
+	A=$(acces_github)
+	if [ "$A" = https ] && command -v gh >/dev/null && [ -t 0 ]; then
+		echo "Certains projets sont privés : connexion à GitHub (une seule fois, dans le navigateur)."
+		gh auth login --hostname github.com --git-protocol https --web && gh auth setup-git && A=gh
+	fi
+	projets | while IFS='|' read -r id nom depot cmd; do
+		d="$PROJETS/$id"
+		if [ -d "$d/.git" ]; then
+			git -C "$d" pull --ff-only -q 2>/dev/null && ok "$nom : à jour" || ok "$nom : présent (pas de mise à jour automatique : modifications locales)"
+			continue
+		fi
+		url=$depot
+		case "$A:$depot" in
+		ssh:*) ;;
+		*:git@github.com:*) r=${depot#git@github.com:}; url="https://github.com/$r" ;;
+		esac
+		if GIT_TERMINAL_PROMPT=0 git clone -q "$url" "$d" 2>/dev/null; then ok "$nom : cloné dans $d"
+		else ko "$nom : impossible à cloner ($url) — dépôt privé ? ajoute ta clé SSH ou « gh auth login »"; fi
+	done
+}
+
+liste() {
+	projets | while IFS='|' read -r id nom depot cmd; do
+		[ -d "$PROJETS/$id" ] && e="✓" || e="·"
+		printf '  %s %-11s %s\n' "$e" "$id" "$nom"
+	done
+}
+
+lancer() {
+	id=${1:?"identifiant (plume-dev liste)"}
+	cmd=$(champ "$id" 4)
+	[ -n "$cmd" ] || { echo "Projet inconnu : $id (plume-dev liste)" >&2; exit 1; }
+	d="$PROJETS/$id"
+	[ -d "$d" ] || { echo "$id n'est pas encore récupéré : plume-dev projets" >&2; exit 1; }
+	charger_env
+	# FenuaSmash (API) : Java 25
+	case "$id" in fenuasmash) export JAVA_HOME=/usr/lib/jvm/openjdk25 ;; esac
+	nom=$(champ "$id" 2)
+	if [ -n "${WAYLAND_DISPLAY:-}" ] && [ ! -t 1 ] && command -v plume-terminal >/dev/null; then
+		exec plume-terminal -T "$nom" sh -c "cd '$d' && echo '▶ $cmd' && $cmd; echo; echo 'Terminé (code '\$?').'; exec bash"
+	fi
+	cd "$d" && echo "▶ $cmd" && exec sh -c "$cmd"
+}
+
+verifier() {
+	charger_env
+	titre "Vérification"
+	v() { if command -v "$1" >/dev/null 2>&1; then ok "$2 : $($3 2>&1 | head -1)"; else ko "$2 absent"; fi; }
+	v git "Git" "git --version"
+	v node "Node.js" "node --version"
+	v npm "npm" "npm --version"
+	[ -x /usr/lib/jvm/openjdk21/bin/java ] && ok "Java 21 (Android, Gradle)" || ko "Java 21 absent"
+	[ -x /usr/lib/jvm/openjdk25/bin/java ] && ok "Java 25 (FenuaSmash)" || ko "Java 25 absent"
+	v docker "Docker" "docker --version"
+	docker compose version >/dev/null 2>&1 && ok "Docker Compose" || ko "Docker Compose absent (ou Docker arrêté)"
+	docker info >/dev/null 2>&1 && ok "Docker utilisable sans sudo" || ko "Docker pas encore utilisable (reconnecte-toi, ou service arrêté)"
+	v qemu-system-x86_64 "QEMU" "qemu-system-x86_64 --version"
+	v zsh "zsh (Plume Manager)" "zsh --version"
+	[ -x "$FLUTTER/bin/flutter" ] && ok "Flutter : $("$FLUTTER/bin/flutter" --version 2>/dev/null | head -1)" || ko "Flutter absent"
+	[ -d "$SDK/platforms/android-$ANDROID_API" ] && ok "SDK Android $ANDROID_API" || ko "SDK Android absent"
+	v adb "adb (téléphone en USB)" "adb --version"
+	[ -x "$HOME/.local/bin/claude" ] || command -v claude >/dev/null && ok "Claude Code" || ko "Claude Code absent"
+	[ -e /dev/kvm ] && ok "KVM (émulateur Android, VM rapides)" || ko "KVM absent (virtualisation désactivée dans le BIOS ?)"
+	echo
+	liste
+}
+
+emulateur() {
+	charger_env
+	S="$SDK/cmdline-tools/latest/bin/sdkmanager"
+	[ -x "$S" ] || { echo "SDK Android absent : plume-dev installer" >&2; exit 1; }
+	IMG="system-images;android-$ANDROID_API;google_apis;x86_64"
+	"$S" --sdk_root="$SDK" emulator "$IMG"
+	echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n plume -k "$IMG" --force
+	ok "Émulateur « plume » créé : flutter emulators --launch plume (ou emulator -avd plume)"
+}
+
+menu() {
+	command -v fuzzel >/dev/null && [ -n "${WAYLAND_DISPLAY:-}" ] || { verifier; exit 0; }
+	choix=$({
+		echo "⬇  Installer / mettre à jour le pack développeur"
+		echo "⟳  Récupérer les projets (~/Projets)"
+		projets | while IFS='|' read -r id nom depot cmd; do
+			[ -d "$PROJETS/$id" ] && echo "▶  $nom  [$id]"
+		done
+		echo "✓  Vérifier ce qui est installé"
+	} | fuzzel --dmenu --prompt "Projets › " --lines 12 --width 60) || exit 0
+	case "$choix" in
+	"⬇"*) exec plume-terminal -T "Pack développeur" sh -c 'plume-dev installer; exec bash' ;;
+	"⟳"*) exec plume-terminal -T "Projets" sh -c 'plume-dev projets; exec bash' ;;
+	"✓"*) exec plume-terminal -T "Pack développeur" sh -c 'plume-dev verifier; exec bash' ;;
+	"▶"*) id=${choix##*\[}; lancer "${id%\]}" ;;
+	esac
+}
+
+case "${1:-}" in
+"") menu ;;
+installer) installer ;;
+--systeme) shift; systeme "$@" ;;
+projets) cloner ;;
+lancer) shift; lancer "$@" ;;
+liste) liste ;;
+verifier) verifier ;;
+emulateur) emulateur ;;
+*) echo "Usage : plume-dev [installer | projets | lancer ID | liste | verifier | emulateur]" >&2; exit 2 ;;
+esac

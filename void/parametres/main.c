@@ -59,6 +59,13 @@ static const struct entry E[] = {
 	{ "Système", "Retour en arrière", "Revenir avant une mise à jour", "plume-retour",
 	  "plume-terminal -T 'Retour en arrière' sh -c \"sudo plume-retour; echo; echo 'Pour revenir : sudo plume-retour restaurer N'; exec bash\"",
 	  "restaurer instantané snapshot annuler" },
+	{ "Système", "Date et heure", "Heure juste, même avec Windows", "plume-heure",
+	  "plume-terminal -T 'Date et heure' sh -c \"plume-heure; echo; echo 'Mise à l heure (et réglage pour Windows s il est là) :'; sudo plume-heure auto; exec bash\"",
+	  "heure date horloge fuseau windows décalée" },
+	{ "Aide", "Bienvenue", "Préparer l'ordinateur : Internet, Flathub, jeux", "plume-bienvenue", "plume-bienvenue",
+	  "bienvenue assistant premier démarrage flathub configuration" },
+	{ "Aide", "Signaler un problème", "Un rapport à envoyer à qui t'aide", "plume-rapport", "plume-rapport",
+	  "bug problème rapport aide diagnostic panne" },
 };
 #define NE ((int)(sizeof E / sizeof E[0]))
 

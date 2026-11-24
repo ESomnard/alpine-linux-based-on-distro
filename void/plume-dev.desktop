@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mes projets
+Comment=Pack développeur : installer les outils, récupérer et lancer tes projets
+Exec=plume-dev
+Icon=plume-dev
+Terminal=false
+Categories=Development;
+Keywords=développeur;dev;projets;flutter;android;node;docker;electron;java;code;

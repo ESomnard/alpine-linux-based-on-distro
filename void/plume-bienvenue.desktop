@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Bienvenue
+Comment=Préparer l'ordinateur : Internet, heure, Flathub, mises à jour, jeux
+Exec=plume-bienvenue
+Icon=plume-bienvenue
+Terminal=false
+Categories=Settings;
+Keywords=bienvenue;assistant;premier démarrage;flathub;configuration;
+NoDisplay=true
