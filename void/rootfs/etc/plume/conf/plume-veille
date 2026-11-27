@@ -1,0 +1,57 @@
+#!/bin/sh
+# Plume (Void) — veille : verrouiller puis éteindre l'écran quand on ne touche plus à rien.
+#   plume-veille              menu (ouvert depuis Paramètres)
+#   plume-veille N            verrouille après N minutes (0 = jamais) ; l'écran s'éteint 5 min plus tard
+#   plume-veille --demarrage  lance swayidle avec le dernier choix (lancé par sway)
+# Le verrouillage avant la mise en veille (capot fermé, bouton Veille) reste toujours actif.
+# Choix gardé dans ~/.config/plume/veille.conf : VERROU=5 ECRAN=10 (minutes, 0 = jamais).
+set -eu
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plume"
+CONF="$DIR/veille.conf"
+LOCK='plume-hud -f || swaylock -f -c 1e1e2e'
+VERROU=5 ECRAN=10
+[ -r "$CONF" ] && . "$CONF"
+
+note() { command -v notify-send >/dev/null && notify-send -a Plume "Veille" "$1" || true; }
+
+demarrer() {
+	pkill -x swayidle 2>/dev/null || true
+	set -- -w
+	[ "$VERROU" -gt 0 ] && set -- "$@" timeout $((VERROU * 60)) "$LOCK"
+	[ "$ECRAN" -gt 0 ] && set -- "$@" timeout $((ECRAN * 60)) 'swaymsg "output * power off"' resume 'swaymsg "output * power on"'
+	set -- "$@" before-sleep "$LOCK"
+	setsid swayidle "$@" >/dev/null 2>&1 &
+}
+
+regler() {
+	case "$1" in *[!0-9]*|"") echo "Usage : plume-veille [0 | minutes]" >&2; exit 2 ;; esac
+	VERROU=$1
+	if [ "$1" -eq 0 ]; then ECRAN=0; else ECRAN=$(($1 + 5)); fi
+	mkdir -p "$DIR"
+	printf 'VERROU=%s ECRAN=%s\n' "$VERROU" "$ECRAN" > "$CONF"
+	demarrer
+	if [ "$VERROU" -eq 0 ]; then note "Désactivée : l'écran reste allumé et déverrouillé."
+	else note "Verrouillage après $VERROU min, écran éteint après $ECRAN min."; fi
+}
+
+menu() {
+	ligne() { if [ "$VERROU" -eq "$1" ]; then printf '●  %s\n' "$2"; else printf '   %s\n' "$2"; fi; }
+	choix=$( { ligne 0 "Jamais (écran toujours allumé)"
+		ligne 5 "Après 5 minutes"
+		ligne 10 "Après 10 minutes"
+		ligne 15 "Après 15 minutes"
+		ligne 30 "Après 30 minutes"
+		ligne 60 "Après 1 heure"; } |
+		fuzzel --dmenu --prompt "Verrouiller l'écran › " --lines 6 --width 40) || exit 0
+	case "$choix" in
+	*Jamais*) regler 0 ;;
+	*"1 heure"*) regler 60 ;;
+	*) regler "$(echo "$choix" | tr -dc 0-9)" ;;
+	esac
+}
+
+case "${1:-}" in
+--demarrage) pgrep -x swayidle >/dev/null || demarrer ;;   # une seule fois par session
+"") menu ;;
+*) regler "$1" ;;
+esac

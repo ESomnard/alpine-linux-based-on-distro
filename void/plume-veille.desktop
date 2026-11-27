@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Veille
+Comment=Verrouiller et éteindre l'écran quand on ne s'en sert plus
+Exec=plume-veille
+Icon=preferences-desktop-screensaver
+Terminal=false
+Categories=Settings;
+Keywords=veille;verrouillage;écran;éteindre;inactif;screensaver;idle;

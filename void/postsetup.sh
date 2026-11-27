@@ -35,6 +35,8 @@ grep -q ashrc "$R/etc/skel/.bashrc" 2>/dev/null || echo '[ -f ~/.ashrc ] && . ~/
 for d in Bureau Documents Téléchargements Images Musique Vidéos; do mkdir -p "$R/etc/skel/$d"; done
 # PipeWire : pas de pipewire-launcher sur Void, pipewire lance wireplumber et pipewire-pulse
 sed -i 's|^exec /usr/libexec/pipewire-launcher|exec pipewire|' "$R/etc/skel/.config/sway/config"
+# veille : swayidle lancé par plume-veille (délai réglable dans Paramètres), plus le bloc figé du modèle
+sed -i '/^exec swayidle -w/,/before-sleep/d' "$R/etc/skel/.config/sway/config"
 mkdir -p "$R/etc/pipewire/pipewire.conf.d"
 ln -sf /usr/share/examples/wireplumber/10-wireplumber.conf "$R/etc/pipewire/pipewire.conf.d/"
 ln -sf /usr/share/examples/pipewire/20-pipewire-pulse.conf "$R/etc/pipewire/pipewire.conf.d/"

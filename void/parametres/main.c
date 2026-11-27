@@ -48,6 +48,7 @@ static const struct entry E[] = {
 	{ "Écran et apparence", "Écrans", "Résolution, plusieurs écrans, HDR", "plume-ecrans", "plume-ecrans", "moniteur résolution hdr taille" },
 	{ "Écran et apparence", "Apparence", "Fond d'écran, couleur du thème", "plume-fonds", "plume-fonds", "fond thème couleur wallpaper" },
 	{ "Écran et apparence", "Lumière du soir", "Moins de lumière bleue le soir", "plume-nuit", "plume-nuit", "nuit soir bleu yeux" },
+	{ "Écran et apparence", "Veille", "Verrouiller et éteindre l'écran inactif", "plume-veille", "plume-veille", "veille verrouillage écran éteindre inactif mise en veille" },
 	{ "Son et notifications", "Son", "Volume, haut-parleurs, micro", "plume-son", "plume-son", "audio volume micro haut-parleur" },
 	{ "Son et notifications", "Notifications", "Les messages reçus", "plume-notifications", "plume-notifications", "alertes messages historique" },
 	{ "Clavier et accessibilité", "Raccourcis", "Tous les raccourcis clavier", "plume-raccourcis", "plume-raccourcis", "clavier touches raccourcis" },

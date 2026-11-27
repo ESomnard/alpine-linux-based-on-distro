@@ -75,6 +75,9 @@ icon('plume-batterie', '#65c80d', '#0f9d58', '''    <rect x="28" y="46" width="6
 icon('plume-nuit', '#1e1b4b', '#6d28d9', '''    <path d="M76 34a30 30 0 1 0 18 46 24 24 0 0 1-18-46z" fill="#ffd772" stroke="#ffd772" stroke-width="3"/>
     <path d="M86 38l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff" stroke="none"/>
     <circle cx="96" cy="58" r="2.5" fill="#fff" stroke="none"/>''', (0, 1, 1, 0))
+icon('plume-veille', '#334155', '#0f766e', '''    <rect x="30" y="38" width="68" height="44" rx="6" fill="#fff" fill-opacity=".14"/>
+    <path d="M52 94h24M64 82v12"/>
+    <path d="M56 50h16l-16 20h16" stroke-width="6"/>''')
 icon('plume-sauvegarde', '#f59e0b', '#ef4444', '''    <path d="M44 80a16 16 0 0 1-2-32 22 22 0 0 1 42-4 18 18 0 0 1 4 36z" fill="#fff" fill-opacity=".18"/>
     <path d="M64 88V60M54 70l10-10 10 10"/>''')
 icon('plume-accessibilite', '#0ea5e9', '#2563eb', '''    <circle cx="64" cy="64" r="34" stroke-width="5"/>
